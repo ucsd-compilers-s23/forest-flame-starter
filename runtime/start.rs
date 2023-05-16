@@ -21,7 +21,8 @@ pub extern "C" fn snek_error(errcode: i32) {
     std::process::exit(errcode);
 }
 
-fn print(i: u64) {
+#[export_name = "\x01snek_print"]
+pub extern "C" fn snek_print(i: u64) -> u64 {
     if i == 3 {
         println!("true");
     } else if i == 1 {
@@ -31,6 +32,7 @@ fn print(i: u64) {
     } else {
         println!("Unknown value: {i}")
     }
+    i
 }
 
 fn parse_input(input: &str) -> u64 {
@@ -47,5 +49,5 @@ fn main() {
     let input = parse_input(&input);
 
     let i: u64 = unsafe { our_code_starts_here(input) };
-    print(i);
+    snek_print(i);
 }

@@ -6,7 +6,7 @@ use crate::{
         Reg::{self, *},
         Reg32,
     },
-    syntax::{Expr, Op1, Op2, Prog, Symbol},
+    syntax::{Expr, FuncDecl, Op1, Op2, Prog, Symbol},
 };
 
 struct Session {
@@ -34,8 +34,30 @@ impl<'a> Ctxt<'a> {
         }
     }
 
+    fn with_params(params: &[Symbol]) -> Ctxt<'a> {
+        let env = params
+            .iter()
+            .enumerate()
+            .map(|(i, param)| {
+                let mem = MemRef {
+                    reg: Rbp,
+                    offset: 8 * (i as i32 + 2),
+                };
+                (*param, mem)
+            })
+            .collect();
+        Ctxt {
+            locals: 0,
+            curr_lbl: None,
+            env,
+        }
+    }
+
     fn lookup(&self, x: Symbol) -> MemRef {
-        *self.env.get(&x).unwrap_or_else(|| unbound_identifier(x))
+        *self
+            .env
+            .get(&x)
+            .unwrap_or_else(|| raise_unbound_identifier(x))
     }
 
     fn set_curr_lbl(&self, lbl: &'a str) -> Ctxt<'a> {
@@ -70,16 +92,21 @@ impl<'a> Ctxt<'a> {
 pub fn compile(prg: &Prog) -> String {
     let mut sess = Session::new();
     let locals = prg.main.depth();
-    sess.fun_entry(locals);
+    for fun in &prg.funcs {
+        sess.compile_fun(fun)
+    }
+    sess.append_instr(Instr::Label("our_code_starts_here".to_string()));
+    sess.fun_entry(locals, &[R14]);
+    sess.append_instr(Instr::Mov(MovArgs::ToReg(R14, Arg64::Reg(Rdi))));
     sess.compile_expr(&Ctxt::new(), Loc::Reg(Rax), &prg.main);
-    sess.fun_exit(locals);
+    sess.fun_exit(locals, &[R14]);
 
     format!(
         "
 section .text
 extern snek_error
+extern snek_print
 global our_code_starts_here
-our_code_starts_here:
 {}
 {INVALID_ARG_LBL}:
   mov edi, 1
@@ -100,22 +127,36 @@ impl Session {
         }
     }
 
-    fn fun_entry(&mut self, locals: u32) {
-        let locals = if locals % 2 == 0 { locals } else { locals + 1 };
+    fn fun_entry(&mut self, locals: u32, preserved: &[Reg]) {
+        let size = stack_size(locals, preserved);
+        for reg in preserved {
+            self.append_instr(Instr::Push(Arg32::Reg(*reg)));
+        }
         self.append_instrs([
             Instr::Push(Arg32::Reg(Rbp)),
             Instr::Mov(MovArgs::ToReg(Rbp, Arg64::Reg(Rsp))),
-            Instr::Sub(BinArgs::ToReg(Rsp, Arg32::Imm(8 * (locals as i32)))),
+            Instr::Sub(BinArgs::ToReg(Rsp, Arg32::Imm(8 * (size as i32)))),
         ]);
     }
 
-    fn fun_exit(&mut self, locals: u32) {
-        let locals = if locals % 2 == 0 { locals } else { locals + 1 };
+    fn fun_exit(&mut self, locals: u32, preserved: &[Reg]) {
+        let size = stack_size(locals, preserved);
+        for reg in preserved.iter().rev() {
+            self.append_instr(Instr::Pop(Loc::Reg(*reg)));
+        }
         self.append_instrs([
-            Instr::Add(BinArgs::ToReg(Rsp, Arg32::Imm(8 * (locals as i32)))),
+            Instr::Add(BinArgs::ToReg(Rsp, Arg32::Imm(8 * (size as i32)))),
             Instr::Pop(Loc::Reg(Rbp)),
             Instr::Ret,
         ]);
+    }
+
+    fn compile_fun(&mut self, fun: &FuncDecl) {
+        let locals = fun.body.depth();
+        self.append_instr(Instr::Label(format!("fun_start_{}", fun.name)));
+        self.fun_entry(locals, &[]);
+        self.compile_expr(&Ctxt::with_params(&fun.params), Loc::Reg(Rax), &fun.body);
+        self.fun_exit(locals, &[]);
     }
 
     fn compile_expr(&mut self, cx: &Ctxt, dst: Loc, e: &Expr) {
@@ -170,7 +211,7 @@ impl Session {
                     self.compile_expr(cx, dst, e);
                     self.append_instr(Instr::Jmp(JmpArg::Label(lbl.to_string())));
                 } else {
-                    break_outside_loop()
+                    raise_break_outside_loop()
                 }
             }
             Expr::Set(var, e) => {
@@ -184,8 +225,23 @@ impl Session {
                 }
                 self.compile_expr(cx, dst, &es[es.len() - 1]);
             }
-            Expr::Call(_, _) => todo!(),
-            Expr::Input => self.move_to(dst, Arg32::Reg(Rdi)),
+            Expr::Call(fun, args) => {
+                let nargs = align_args(args.len()) as i32;
+                self.append_instr(Instr::Sub(BinArgs::ToReg(Rsp, Arg32::Imm(8 * nargs))));
+                for (i, arg) in args.iter().enumerate() {
+                    let mem = MemRef {
+                        reg: Rsp,
+                        offset: 8 * (i as i32),
+                    };
+                    self.compile_expr(cx, Loc::Mem(mem), arg);
+                }
+                self.append_instrs([
+                    Instr::Call(JmpArg::Label(format!("fun_start_{fun}"))),
+                    Instr::Add(BinArgs::ToReg(Rsp, Arg32::Imm(8 * nargs))),
+                ]);
+                self.move_to(dst, Arg64::Reg(Rax));
+            }
+            Expr::Input => self.move_to(dst, Arg32::Reg(R14)),
         }
     }
 
@@ -223,9 +279,10 @@ impl Session {
                 ]);
             }
 
-            Op1::Print => {
-                todo!()
-            }
+            Op1::Print => self.append_instrs([
+                Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Reg(Rax))),
+                Instr::Call(JmpArg::Label("snek_print".to_string())),
+            ]),
         }
         self.move_to(target, Arg32::Reg(Rax));
     }
@@ -344,6 +401,23 @@ impl Session {
     }
 }
 
+fn align_args(n: usize) -> usize {
+    if n % 2 == 0 {
+        n
+    } else {
+        n + 1
+    }
+}
+
+fn stack_size(locals: u32, preserved: &[Reg]) -> u32 {
+    let n = locals + preserved.len() as u32;
+    if n % 2 == 0 {
+        locals
+    } else {
+        locals + 1
+    }
+}
+
 trait Repr64 {
     fn repr64(&self) -> Arg64;
 }
@@ -380,19 +454,19 @@ fn check_dup_bindings(bindings: &[(Symbol, Expr)]) {
     let mut seen = HashSet::new();
     for (name, _) in bindings {
         if !seen.insert(*name) {
-            duplicate_binding(*name);
+            raise_duplicate_binding(*name);
         }
     }
 }
 
-fn duplicate_binding(id: Symbol) {
+fn raise_duplicate_binding(id: Symbol) {
     panic!("duplicate binding {id}");
 }
 
-fn unbound_identifier<T>(id: Symbol) -> T {
+fn raise_unbound_identifier<T>(id: Symbol) -> T {
     panic!("unbound variable identifier {id}")
 }
 
-fn break_outside_loop() {
+fn raise_break_outside_loop() {
     panic!("break outside loop")
 }

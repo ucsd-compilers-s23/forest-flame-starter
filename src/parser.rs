@@ -143,7 +143,8 @@ impl Parser {
                     Expr::BinOp(expr_op, Box::new(e1_instrs), Box::new(e2_instrs))
                 }
 
-                [Sexp::Atom(S(func)), args @ ..] => {
+                [func, args @ ..] => {
+                    let func = self.parse_identifier(func);
                     let exprs: Vec<_> = args.iter().map(|e| self.parse_expr(e)).collect();
                     Expr::Call(Symbol::new(func), exprs)
                 }
@@ -214,6 +215,7 @@ fn is_keyword(s: &str) -> bool {
             | "let"
             | "set!"
             | "input"
+            | "fun"
     )
 }
 
