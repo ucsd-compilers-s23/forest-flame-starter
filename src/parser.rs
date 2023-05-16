@@ -49,6 +49,15 @@ impl Parser {
                 _ => Expr::Var(Symbol::new(id)),
             },
             Sexp::List(vec) => match &vec[..] {
+                // (vec size elem)
+                [Sexp::Atom(S(keyword)), es @ ..] if keyword == "vec" => {
+                    let [size, elem] = &es[..] else {
+                        return syntax_error("malformed vec");
+                    };
+                    let size = self.parse_expr(size);
+                    let elem = self.parse_expr(elem);
+                    Expr::VecNew(Box::new(size), Box::new(elem))
+                }
                 // Block
                 [Sexp::Atom(S(keyword)), es @ ..] if keyword == "block" => {
                     let es: Vec<_> = es.iter().map(|e| self.parse_expr(e)).collect();

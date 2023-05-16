@@ -21,8 +21,7 @@ const OVERFLOW_LBL: &str = "overflow";
 #[derive(Debug, Clone)]
 struct Ctxt<'a> {
     env: im::HashMap<Symbol, MemRef>,
-    /// Number of local variables
-    locals: u32,
+    si: u32,
     curr_lbl: Option<&'a str>,
     in_fun: bool,
 }
@@ -30,7 +29,7 @@ struct Ctxt<'a> {
 impl<'a> Ctxt<'a> {
     fn new() -> Ctxt<'a> {
         Ctxt {
-            locals: 0,
+            si: 0,
             curr_lbl: None,
             env: im::HashMap::default(),
             in_fun: false,
@@ -50,7 +49,7 @@ impl<'a> Ctxt<'a> {
             })
             .collect();
         Ctxt {
-            locals: 0,
+            si: 0,
             curr_lbl: None,
             env,
             in_fun: true,
@@ -72,10 +71,10 @@ impl<'a> Ctxt<'a> {
     }
 
     fn next_local(&self) -> (Ctxt<'a>, MemRef) {
-        let si: i32 = (self.locals + 1).try_into().unwrap();
+        let si: i32 = (self.si + 1).try_into().unwrap();
         (
             Ctxt {
-                locals: self.locals + 1,
+                si: self.si + 1,
                 ..self.clone()
             },
             MemRef {
@@ -100,10 +99,13 @@ pub fn compile(prg: &Prog) -> String {
             let locals = prg.main.depth();
             sess.compile_funs(&prg.funs);
             sess.append_instr(Instr::Label("our_code_starts_here".to_string()));
-            sess.fun_entry(locals, &[R14]);
-            sess.append_instr(Instr::Mov(MovArgs::ToReg(R14, Arg64::Reg(Rdi))));
+            sess.fun_entry(locals, &[R14, R15]);
+            sess.append_instrs([
+                Instr::Mov(MovArgs::ToReg(R14, Arg64::Reg(Rdi))),
+                Instr::Mov(MovArgs::ToReg(R15, Arg64::Reg(Rsi))),
+            ]);
             sess.compile_expr(&Ctxt::new(), Loc::Reg(Rax), &prg.main);
-            sess.fun_exit(locals, &[R14]);
+            sess.fun_exit(locals, &[R14, R15]);
 
             format!(
                 "
@@ -236,7 +238,7 @@ impl Session {
             }
             Expr::Block(es) => {
                 for e in &es[..es.len() - 1] {
-                    self.compile_expr(cx, Loc::Reg(Rbx), e);
+                    self.compile_expr(cx, Loc::Reg(Rcx), e);
                 }
                 self.compile_expr(cx, dst, &es[es.len() - 1]);
             }
@@ -270,6 +272,13 @@ impl Session {
                     self.move_to(dst, Arg32::Reg(R14))
                 }
             }
+            Expr::VecNew(size, elem) => {
+                let (nextcx, mem) = cx.next_local();
+                self.compile_expr(cx, Loc::Mem(mem), size);
+                self.compile_expr(&nextcx, Loc::Reg(Rcx), elem);
+                self.append_instr(Instr::Mov(MovArgs::ToReg(Rax, Arg64::Mem(mem))));
+                self.check_is_num(Rax);
+            }
         }
     }
 
@@ -293,17 +302,17 @@ impl Session {
             Op1::IsNum => {
                 self.append_instrs([
                     Instr::And(BinArgs::ToReg(Rax, Arg32::Imm(1))),
-                    Instr::Mov(MovArgs::ToReg(Rbx, true.repr64())),
+                    Instr::Mov(MovArgs::ToReg(Rcx, true.repr64())),
                     Instr::Mov(MovArgs::ToReg(Rax, false.repr64())),
-                    Instr::CMov(CMov::Z(Rax, Arg64::Reg(Rbx))),
+                    Instr::CMov(CMov::Z(Rax, Arg64::Reg(Rcx))),
                 ]);
             }
             Op1::IsBool => {
                 self.append_instrs([
                     Instr::And(BinArgs::ToReg(Rax, Arg32::Imm(1))),
-                    Instr::Mov(MovArgs::ToReg(Rbx, false.repr64())),
+                    Instr::Mov(MovArgs::ToReg(Rcx, false.repr64())),
                     Instr::Mov(MovArgs::ToReg(Rax, true.repr64())),
-                    Instr::CMov(CMov::Z(Rax, Arg64::Reg(Rbx))),
+                    Instr::CMov(CMov::Z(Rax, Arg64::Reg(Rcx))),
                 ]);
             }
 
@@ -331,14 +340,14 @@ impl Session {
                     self.append_instr(Instr::Mov(MovArgs::ToMem(dst, Reg32::Imm(src))))
                 } else {
                     self.append_instrs([
-                        Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Imm(src))),
-                        Instr::Mov(MovArgs::ToMem(dst, Reg32::Reg(Rcx))),
+                        Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Imm(src))),
+                        Instr::Mov(MovArgs::ToMem(dst, Reg32::Reg(Rdx))),
                     ])
                 }
             }
             (Loc::Mem(dst), Arg64::Mem(src)) => self.append_instrs([
-                Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Mem(src))),
-                Instr::Mov(MovArgs::ToMem(dst, Reg32::Reg(Rcx))),
+                Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Mem(src))),
+                Instr::Mov(MovArgs::ToMem(dst, Reg32::Reg(Rdx))),
             ]),
         }
     }
@@ -346,7 +355,7 @@ impl Session {
     fn compile_bin_op(&mut self, cx: &Ctxt, dst: Loc, op: Op2, e1: &Expr, e2: &Expr) {
         let (nextcx, mem) = cx.next_local();
         self.compile_expr(cx, Loc::Mem(mem), e1);
-        self.compile_expr(&nextcx, Loc::Reg(Rbx), e2);
+        self.compile_expr(&nextcx, Loc::Reg(Rcx), e2);
         self.append_instr(Instr::Mov(MovArgs::ToReg(Rax, Arg64::Mem(mem))));
 
         match op {
@@ -358,13 +367,13 @@ impl Session {
             | Op2::Less
             | Op2::LessEqual => {
                 self.check_is_num(Rax);
-                self.check_is_num(Rbx);
+                self.check_is_num(Rcx);
             }
             Op2::Equal => {
                 self.append_instrs([
-                    Instr::Cmp(BinArgs::ToReg(Rcx, Arg32::Reg(Rax))),
-                    Instr::Xor(BinArgs::ToReg(Rcx, Arg32::Reg(Rbx))),
-                    Instr::Test(BinArgs::ToReg(Rcx, Arg32::Imm(1))),
+                    Instr::Cmp(BinArgs::ToReg(Rdx, Arg32::Reg(Rax))),
+                    Instr::Xor(BinArgs::ToReg(Rdx, Arg32::Reg(Rcx))),
+                    Instr::Test(BinArgs::ToReg(Rdx, Arg32::Imm(1))),
                     Instr::Jnz(JmpArg::Label(INVALID_ARG_LBL.to_string())),
                 ]);
             }
@@ -373,20 +382,20 @@ impl Session {
         match op {
             Op2::Plus => {
                 self.append_instrs([
-                    Instr::Add(BinArgs::ToReg(Rax, Arg32::Reg(Rbx))),
+                    Instr::Add(BinArgs::ToReg(Rax, Arg32::Reg(Rcx))),
                     Instr::Jo(JmpArg::Label(OVERFLOW_LBL.to_string())),
                 ]);
             }
             Op2::Minus => {
                 self.append_instrs([
-                    Instr::Sub(BinArgs::ToReg(Rax, Arg32::Reg(Rbx))),
+                    Instr::Sub(BinArgs::ToReg(Rax, Arg32::Reg(Rcx))),
                     Instr::Jo(JmpArg::Label(OVERFLOW_LBL.to_string())),
                 ]);
             }
             Op2::Times => {
                 self.append_instrs([
                     Instr::Sar(BinArgs::ToReg(Rax, Arg32::Imm(1))),
-                    Instr::IMul(BinArgs::ToReg(Rax, Arg32::Reg(Rbx))),
+                    Instr::IMul(BinArgs::ToReg(Rax, Arg32::Reg(Rcx))),
                     Instr::Jo(JmpArg::Label(OVERFLOW_LBL.to_string())),
                 ]);
             }
@@ -401,10 +410,10 @@ impl Session {
 
     fn compile_cmp(&mut self, cmp: impl FnOnce(Reg, Arg64) -> CMov) {
         self.append_instrs([
-            Instr::Cmp(BinArgs::ToReg(Rax, Arg32::Reg(Rbx))),
+            Instr::Cmp(BinArgs::ToReg(Rax, Arg32::Reg(Rcx))),
             Instr::Mov(MovArgs::ToReg(Rax, false.repr64())),
-            Instr::Mov(MovArgs::ToReg(Rbx, true.repr64())),
-            Instr::CMov(cmp(Rax, Arg64::Reg(Rbx))),
+            Instr::Mov(MovArgs::ToReg(Rcx, true.repr64())),
+            Instr::CMov(cmp(Rax, Arg64::Reg(Rcx))),
         ]);
     }
 

@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fmt};
+use std::fmt;
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub struct Symbol(&'static str);
@@ -28,6 +28,7 @@ pub enum Expr {
     Loop(Box<Expr>),
     Break(Box<Expr>),
     Set(Symbol, Box<Expr>),
+    VecNew(Box<Expr>, Box<Expr>),
     Block(Vec<Expr>),
     Call(Symbol, Vec<Expr>),
     Input,
@@ -76,6 +77,7 @@ impl Expr {
             Expr::Call(_, es) | Expr::Block(es) => es.iter().map(Expr::depth).max().unwrap_or(0),
             Expr::Input | Expr::Var(_) | Expr::Number(_) | Expr::Boolean(_) => 0,
             Expr::UnOp(_, e) | Expr::Loop(e) | Expr::Break(e) | Expr::Set(_, e) => e.depth(),
+            Expr::VecNew(size, elem) => u32::max(size.depth(), elem.depth() + 1),
         }
     }
 }
