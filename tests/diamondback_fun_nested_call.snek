@@ -1,0 +1,9 @@
+(fun (fun1 n)
+    (* n 5)
+)
+
+(fun (fun2 n)
+    (fun1 (* n n))
+)
+
+(+ (fun1 input) (fun2 input))

@@ -1,0 +1,6 @@
+(fun (hello x)
+  (block
+    (fun (goodbye y) (sub1 y))
+    (add1 x))
+
+(hello 12)

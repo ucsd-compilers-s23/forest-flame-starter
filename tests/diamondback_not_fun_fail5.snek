@@ -1,0 +1,3 @@
+(func (hello x) x)
+
+(hello 4)

@@ -1,0 +1,15 @@
+(fun (fun1 m n)
+    (* m n)
+)
+
+(let ((x 0)) 
+    (loop (block
+        (if (> x input)
+            (break 0)
+            (block
+                (print (fun1 x input))
+                (set! x (add1 x))
+            )
+        )
+    ))
+)

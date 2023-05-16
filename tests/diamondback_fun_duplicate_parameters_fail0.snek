@@ -1,0 +1,9 @@
+(fun (fun2 l m n o p)
+    (* l l)
+)
+
+(fun (fun1 p m n o p)
+    (* n n)
+)
+
+(fun2 2 3 4 6 6)

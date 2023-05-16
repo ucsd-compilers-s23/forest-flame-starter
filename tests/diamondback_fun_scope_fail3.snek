@@ -1,0 +1,4 @@
+(fun (increment x) (add1 x))
+(fun (increment2 y) (add1 x))
+
+(increment2 43)

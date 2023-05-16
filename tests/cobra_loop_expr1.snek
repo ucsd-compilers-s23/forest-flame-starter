@@ -1,0 +1,17 @@
+(let ((a 2) (b 3) (c 0) (i 0) (j 0))
+  (loop
+    (if (< i a)
+      (block
+        (set! j 0)
+        (loop
+          (if (< j b)
+            (block (set! c (sub1 c)) (set! j (add1 j)))
+            (break c)
+          )
+        )
+        (set! i (add1 i))
+      )
+      (break c)
+    )
+  )
+)

@@ -1,0 +1,9 @@
+(fun (name parameter) 
+    parameter
+)
+
+(fun (name parameter) 
+    parameter
+)
+
+(+ (name 0) (name 1))

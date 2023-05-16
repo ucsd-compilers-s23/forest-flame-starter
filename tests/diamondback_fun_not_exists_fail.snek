@@ -1,0 +1,5 @@
+(fun (fun1 m n)
+    (* m n)
+)
+
+(fun2 input)

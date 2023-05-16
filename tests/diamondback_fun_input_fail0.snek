@@ -1,0 +1,5 @@
+(fun (wow n input)
+    n
+)
+
+(wow 1)

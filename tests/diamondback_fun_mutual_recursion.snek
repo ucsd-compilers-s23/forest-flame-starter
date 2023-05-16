@@ -1,0 +1,15 @@
+(fun (isodd n)
+    (if (= n 0)
+        false
+        (iseven (sub1 n))
+    )
+)
+
+(fun (iseven n)
+    (if (= n 0)
+        true
+        (isodd (sub1 n))
+    )
+)
+
+(iseven input)
