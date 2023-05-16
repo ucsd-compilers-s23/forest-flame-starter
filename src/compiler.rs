@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     asm::{
-        instrs_to_string, Arg32, Arg64, BinArgs, CMov, Instr, JmpArg, Loc, MemRef, MovArgs, Offset,
+        instrs_to_string, Arg32, Arg64, BinArgs, CMov, Instr, Loc, MemRef, MovArgs, Offset,
         Reg::{self, *},
         Reg32,
     },
@@ -217,13 +217,10 @@ impl Session {
                 self.compile_expr(cx, Loc::Reg(Rax), e1);
                 self.append_instrs([
                     Instr::Cmp(BinArgs::ToReg(Rax, false.repr32().into())),
-                    Instr::Je(JmpArg::Label(else_lbl.clone())),
+                    Instr::Je(else_lbl.clone()),
                 ]);
                 self.compile_expr(cx, dst, e2);
-                self.append_instrs([
-                    Instr::Jmp(JmpArg::Label(end_lbl.clone())),
-                    Instr::Label(else_lbl),
-                ]);
+                self.append_instrs([Instr::Jmp(end_lbl.clone()), Instr::Label(else_lbl)]);
                 self.compile_expr(cx, dst, e3);
                 self.append_instr(Instr::Label(end_lbl))
             }
@@ -234,15 +231,12 @@ impl Session {
 
                 self.append_instr(Instr::Label(loop_start_lbl.clone()));
                 self.compile_expr(&cx.set_curr_lbl(&loop_end_lbl), dst, e);
-                self.append_instrs([
-                    Instr::Jmp(JmpArg::Label(loop_start_lbl)),
-                    Instr::Label(loop_end_lbl),
-                ])
+                self.append_instrs([Instr::Jmp(loop_start_lbl), Instr::Label(loop_end_lbl)])
             }
             Expr::Break(e) => {
                 if let Some(lbl) = cx.curr_lbl {
                     self.compile_expr(cx, dst, e);
-                    self.append_instr(Instr::Jmp(JmpArg::Label(lbl.to_string())));
+                    self.append_instr(Instr::Jmp(lbl.to_string()));
                 } else {
                     raise_break_outside_loop()
                 }
@@ -276,7 +270,7 @@ impl Session {
                     self.compile_expr(cx, Loc::Mem(mem), arg);
                 }
                 self.append_instrs([
-                    Instr::Call(JmpArg::Label(format!("fun_start_{fun}"))),
+                    Instr::Call(format!("fun_start_{fun}")),
                     Instr::Add(BinArgs::ToReg(Rsp, Arg32::Imm(8 * nargs))),
                 ]);
                 self.move_to(dst, Arg64::Reg(Rax));
@@ -297,13 +291,13 @@ impl Session {
                 self.append_instrs([
                     Instr::Sar(BinArgs::ToReg(Rcx, Arg32::Imm(1))),
                     Instr::Cmp(BinArgs::ToReg(Rcx, Arg32::Imm(0))),
-                    Instr::Jl(JmpArg::Label(NEGATIVE_SIZE.to_string())),
+                    Instr::Jl(NEGATIVE_SIZE.to_string()),
                     Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Reg(HEAP_START_REG))), // heap_start
                     Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(HEAP_END_REG))),   // heap_end
                     Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(HEAP_PTR))),       // heap_ptr
                     // count is already in RCX
                     // elem is already in R8
-                    Instr::Call(JmpArg::Label("snek_alloc".to_string())),
+                    Instr::Call("snek_alloc".to_string()),
                 ]);
                 self.move_to(dst, Arg64::Reg(Rax));
             }
@@ -332,9 +326,9 @@ impl Session {
                     )),
                     Instr::Sar(BinArgs::ToReg(Rsi, Arg32::Imm(1))),
                     Instr::Cmp(BinArgs::ToReg(Rsi, Arg32::Imm(0))),
-                    Instr::Jl(JmpArg::Label(INDEX_OUT_OF_BOUNDS.to_string())),
+                    Instr::Jl(INDEX_OUT_OF_BOUNDS.to_string()),
                     Instr::Cmp(BinArgs::ToReg(Rsi, Arg32::Reg(Rcx))),
-                    Instr::Jge(JmpArg::Label(INDEX_OUT_OF_BOUNDS.to_string())),
+                    Instr::Jge(INDEX_OUT_OF_BOUNDS.to_string()),
                     Instr::Mov(MovArgs::ToMem(
                         MemRef {
                             reg: Rdx,
@@ -359,14 +353,14 @@ impl Session {
                 self.check_is_num(Reg::Rax);
                 self.append_instrs([
                     Instr::Add(BinArgs::ToReg(Rax, 1.repr32())),
-                    Instr::Jo(JmpArg::Label(OVERFLOW_LBL.to_string())),
+                    Instr::Jo(OVERFLOW_LBL.to_string()),
                 ])
             }
             Op1::Sub1 => {
                 self.check_is_num(Reg::Rax);
                 self.append_instrs([
                     Instr::Sub(BinArgs::ToReg(Rax, 1.repr32())),
-                    Instr::Jo(JmpArg::Label(OVERFLOW_LBL.to_string())),
+                    Instr::Jo(OVERFLOW_LBL.to_string()),
                 ])
             }
             Op1::IsNum => {
@@ -389,7 +383,7 @@ impl Session {
 
             Op1::Print => self.append_instrs([
                 Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Reg(Rax))),
-                Instr::Call(JmpArg::Label("snek_print".to_string())),
+                Instr::Call("snek_print".to_string()),
             ]),
         }
         self.move_to(target, Arg32::Reg(Rax));
@@ -445,7 +439,7 @@ impl Session {
                     Instr::Cmp(BinArgs::ToReg(Rdx, Arg32::Reg(Rax))),
                     Instr::Xor(BinArgs::ToReg(Rdx, Arg32::Reg(Rcx))),
                     Instr::Test(BinArgs::ToReg(Rdx, Arg32::Imm(1))),
-                    Instr::Jnz(JmpArg::Label(INVALID_ARG_LBL.to_string())),
+                    Instr::Jnz(INVALID_ARG_LBL.to_string()),
                 ]);
             }
         }
@@ -454,20 +448,20 @@ impl Session {
             Op2::Plus => {
                 self.append_instrs([
                     Instr::Add(BinArgs::ToReg(Rax, Arg32::Reg(Rcx))),
-                    Instr::Jo(JmpArg::Label(OVERFLOW_LBL.to_string())),
+                    Instr::Jo(OVERFLOW_LBL.to_string()),
                 ]);
             }
             Op2::Minus => {
                 self.append_instrs([
                     Instr::Sub(BinArgs::ToReg(Rax, Arg32::Reg(Rcx))),
-                    Instr::Jo(JmpArg::Label(OVERFLOW_LBL.to_string())),
+                    Instr::Jo(OVERFLOW_LBL.to_string()),
                 ]);
             }
             Op2::Times => {
                 self.append_instrs([
                     Instr::Sar(BinArgs::ToReg(Rax, Arg32::Imm(1))),
                     Instr::IMul(BinArgs::ToReg(Rax, Arg32::Reg(Rcx))),
-                    Instr::Jo(JmpArg::Label(OVERFLOW_LBL.to_string())),
+                    Instr::Jo(OVERFLOW_LBL.to_string()),
                 ]);
             }
             Op2::Equal => self.compile_cmp(CMov::E),
@@ -491,16 +485,16 @@ impl Session {
     fn check_is_num(&mut self, reg: Reg) {
         self.append_instrs([
             Instr::Test(BinArgs::ToReg(reg, Arg32::Imm(0b001))),
-            Instr::Jnz(JmpArg::Label(INVALID_ARG_LBL.to_string())),
+            Instr::Jnz(INVALID_ARG_LBL.to_string()),
         ]);
     }
 
     fn check_is_vec(&mut self, reg: Reg) {
         self.append_instrs([
             Instr::Test(BinArgs::ToReg(reg, Arg32::Imm(0b001))),
-            Instr::Jz(JmpArg::Label(INVALID_ARG_LBL.to_string())), // jump if is num
+            Instr::Jz(INVALID_ARG_LBL.to_string()), // jump if is num
             Instr::Test(BinArgs::ToReg(reg, Arg32::Imm(0b010))),
-            Instr::Jz(JmpArg::Label(INVALID_ARG_LBL.to_string())), // jump if is bool
+            Instr::Jz(INVALID_ARG_LBL.to_string()), // jump if is bool
         ]);
     }
 

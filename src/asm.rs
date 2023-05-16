@@ -1,3 +1,4 @@
+#![allow(unused)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Reg {
     Rax,
@@ -66,12 +67,6 @@ pub enum BinArgs {
     ToMem(MemRef, Reg32),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum JmpArg {
-    Label(String),
-    Reg(Reg),
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Loc {
     Reg(Reg),
@@ -111,23 +106,23 @@ pub enum Instr {
 
     Label(String),
 
-    Call(JmpArg),
+    Call(String),
     Ret,
 
-    Jmp(JmpArg),
-    Je(JmpArg),
-    Jne(JmpArg),
-    Jl(JmpArg),
-    Jle(JmpArg),
-    Jg(JmpArg),
-    Jge(JmpArg),
+    Jmp(String),
+    Je(String),
+    Jne(String),
+    Jl(String),
+    Jle(String),
+    Jg(String),
+    Jge(String),
 
-    Js(JmpArg),  // jump if msb is 1
-    Jz(JmpArg),  // jump if result was 0
-    Jnz(JmpArg), // jump if result was not 0
+    Js(String),  // jump if msb is 1
+    Jz(String),  // jump if result was 0
+    Jnz(String), // jump if result was not 0
 
-    Jo(JmpArg),  // jump if last arith operation overflowed
-    Jno(JmpArg), // jump if last arith operation didn't overflow
+    Jo(String),  // jump if last arith operation overflowed
+    Jno(String), // jump if last arith operation didn't overflow
 
     Lea(Reg, MemRef),
 
@@ -242,13 +237,6 @@ pub fn bin_args_to_string(args: BinArgs) -> String {
     }
 }
 
-pub fn jmp_arg_to_string(arg: &JmpArg) -> String {
-    match arg {
-        JmpArg::Label(s) => s.clone(),
-        JmpArg::Reg(r) => reg_to_string(*r),
-    }
-}
-
 pub fn loc_to_string(loc: Loc) -> String {
     match loc {
         Loc::Reg(r) => reg_to_string(r),
@@ -275,20 +263,20 @@ pub fn instr_to_string(i: &Instr) -> String {
         Instr::Pop(loc) => format!("  pop {}", loc_to_string(*loc)),
         Instr::Label(s) => format!("{}:", s),
 
-        Instr::Call(s) => format!("  call {}", jmp_arg_to_string(s)),
+        Instr::Call(s) => format!("  call {s}"),
         Instr::Ret => format!("  ret"),
-        Instr::Jmp(s) => format!("  jmp {}", jmp_arg_to_string(s)),
-        Instr::Je(s) => format!("  je {}", jmp_arg_to_string(s)),
-        Instr::Jne(s) => format!("  jne {}", jmp_arg_to_string(s)),
-        Instr::Jle(s) => format!("  jle {}", jmp_arg_to_string(s)),
-        Instr::Jl(s) => format!("  jl {}", jmp_arg_to_string(s)),
-        Instr::Jg(s) => format!("  jg {}", jmp_arg_to_string(s)),
-        Instr::Jge(s) => format!("  jge {}", jmp_arg_to_string(s)),
-        Instr::Js(s) => format!("  js {}", jmp_arg_to_string(s)),
-        Instr::Jz(s) => format!("  jz {}", jmp_arg_to_string(s)),
-        Instr::Jnz(s) => format!("  jnz {}", jmp_arg_to_string(s)),
-        Instr::Jo(s) => format!("  jo {}", jmp_arg_to_string(s)),
-        Instr::Jno(s) => format!("  jno {}", jmp_arg_to_string(s)),
+        Instr::Jmp(s) => format!("  jmp {s}"),
+        Instr::Je(s) => format!("  je {s}"),
+        Instr::Jne(s) => format!("  jne {s}"),
+        Instr::Jle(s) => format!("  jle {s}"),
+        Instr::Jl(s) => format!("  jl {s}"),
+        Instr::Jg(s) => format!("  jg {s}"),
+        Instr::Jge(s) => format!("  jge {s}"),
+        Instr::Js(s) => format!("  js {s}"),
+        Instr::Jz(s) => format!("  jz {s}"),
+        Instr::Jnz(s) => format!("  jnz {s}"),
+        Instr::Jo(s) => format!("  jo {s}"),
+        Instr::Jno(s) => format!("  jno {s}"),
         Instr::CMov(cmov) => match cmov {
             CMov::E(reg, arg) => {
                 format!("  cmove {}, {}", reg_to_string(*reg), arg64_to_string(arg))
