@@ -29,6 +29,7 @@ pub enum Expr {
     Break(Box<Expr>),
     Set(Symbol, Box<Expr>),
     VecNew(Box<Expr>, Box<Expr>),
+    VecSet(Box<Expr>, Box<Expr>, Box<Expr>),
     Block(Vec<Expr>),
     Call(Symbol, Vec<Expr>),
     Input,
@@ -78,6 +79,7 @@ impl Expr {
             Expr::Input | Expr::Var(_) | Expr::Number(_) | Expr::Boolean(_) => 0,
             Expr::UnOp(_, e) | Expr::Loop(e) | Expr::Break(e) | Expr::Set(_, e) => e.depth(),
             Expr::VecNew(size, elem) => u32::max(size.depth(), elem.depth() + 1),
+            Expr::VecSet(vec, idx, val) => vec.depth().max(idx.depth() + 1).max(val.depth() + 2),
         }
     }
 }

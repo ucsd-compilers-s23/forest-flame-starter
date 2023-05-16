@@ -21,7 +21,17 @@ pub enum Reg {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MemRef {
     pub reg: Reg,
-    pub offset: i32,
+    pub offset: Offset,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Offset {
+    Constant(i32),
+    Computed {
+        reg: Reg,
+        factor: i32,
+        constant: i32,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -119,6 +129,8 @@ pub enum Instr {
     Jo(JmpArg),  // jump if last arith operation overflowed
     Jno(JmpArg), // jump if last arith operation didn't overflow
 
+    Lea(Reg, MemRef),
+
     Comment(String),
 }
 
@@ -167,10 +179,21 @@ pub fn imm32_to_string(i: i32) -> String {
 }
 
 pub fn mem_ref_to_string(m: MemRef) -> String {
-    if m.offset < 0 {
-        format!("QWORD [{} - {}]", reg_to_string(m.reg), m.offset.abs())
-    } else {
-        format!("QWORD [{} + {}]", reg_to_string(m.reg), m.offset)
+    format!(
+        "QWORD [{} + {}]",
+        reg_to_string(m.reg),
+        offset_to_string(m.offset)
+    )
+}
+
+fn offset_to_string(off: Offset) -> String {
+    match off {
+        Offset::Constant(n) => format!("{}", n),
+        Offset::Computed {
+            reg,
+            factor,
+            constant,
+        } => format!("{} * {} + {}", reg_to_string(reg), factor, constant),
     }
 }
 
@@ -289,6 +312,9 @@ pub fn instr_to_string(i: &Instr) -> String {
                 format!("  cmovle {}, {}", reg_to_string(*reg), arg64_to_string(arg))
             }
         },
+        Instr::Lea(reg, mem) => {
+            format!("  lea {}, {}", reg_to_string(*reg), mem_ref_to_string(*mem))
+        }
     }
 }
 
