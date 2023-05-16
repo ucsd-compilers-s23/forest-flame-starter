@@ -13,6 +13,8 @@ extern "C" {
 pub extern "C" fn snek_error(errcode: i32) {
     if errcode == 1 {
         eprintln!("invalid argument");
+    } else if errcode == 2 {
+        eprintln!("overflow");
     } else {
         eprintln!("an error ocurred {errcode}");
     }

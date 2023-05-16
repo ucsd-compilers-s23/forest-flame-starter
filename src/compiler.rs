@@ -9,12 +9,13 @@ use crate::{
     syntax::{Expr, Op1, Op2, Prog, Symbol},
 };
 
-struct Compiler {
+struct Session {
     tag: u32,
     instrs: Vec<Instr>,
 }
 
 const INVALID_ARG_LBL: &str = "invalid_argument";
+const OVERFLOW_LBL: &str = "overflow";
 
 #[derive(Debug, Clone)]
 struct Ctxt<'a> {
@@ -44,11 +45,6 @@ impl<'a> Ctxt<'a> {
         }
     }
 
-    fn next_local_with_name(&self, x: Symbol) -> Ctxt<'a> {
-        let (cx, memref) = self.next_local();
-        cx.add_binding(x, memref)
-    }
-
     fn next_local(&self) -> (Ctxt<'a>, MemRef) {
         let si: i32 = (self.locals + 1).try_into().unwrap();
         (
@@ -72,10 +68,11 @@ impl<'a> Ctxt<'a> {
 }
 
 pub fn compile(prg: &Prog) -> String {
-    let mut compiler = Compiler::new();
-    compiler.fun_entry();
-    compiler.compile_expr(&Ctxt::new(), Loc::Reg(Rax), &prg.main);
-    compiler.fun_exit();
+    let mut sess = Session::new();
+    let locals = prg.main.depth();
+    sess.fun_entry(locals);
+    sess.compile_expr(&Ctxt::new(), Loc::Reg(Rax), &prg.main);
+    sess.fun_exit(locals);
 
     format!(
         "
@@ -87,26 +84,38 @@ our_code_starts_here:
 {INVALID_ARG_LBL}:
   mov edi, 1
   call snek_error
+{OVERFLOW_LBL}:
+  mov edi, 2
+  call snek_error
 ",
-        instrs_to_string(&compiler.instrs)
+        instrs_to_string(&sess.instrs)
     )
 }
 
-impl Compiler {
-    fn new() -> Compiler {
-        Compiler {
+impl Session {
+    fn new() -> Session {
+        Session {
             tag: 0,
             instrs: vec![],
         }
     }
 
-    fn fun_entry(&mut self) {
-        self.append_instr(Instr::Push(Arg32::Reg(Rbp)));
-        self.append_instr(Instr::Mov(MovArgs::ToReg(Rbp, Arg64::Reg(Rsp))));
+    fn fun_entry(&mut self, locals: u32) {
+        let locals = if locals % 2 == 0 { locals } else { locals + 1 };
+        self.append_instrs([
+            Instr::Push(Arg32::Reg(Rbp)),
+            Instr::Mov(MovArgs::ToReg(Rbp, Arg64::Reg(Rsp))),
+            Instr::Sub(BinArgs::ToReg(Rsp, Arg32::Imm(8 * (locals as i32)))),
+        ]);
     }
 
-    fn fun_exit(&mut self) {
-        self.append_instrs([Instr::Pop(Loc::Reg(Rbp)), Instr::Ret]);
+    fn fun_exit(&mut self, locals: u32) {
+        let locals = if locals % 2 == 0 { locals } else { locals + 1 };
+        self.append_instrs([
+            Instr::Add(BinArgs::ToReg(Rsp, Arg32::Imm(8 * (locals as i32)))),
+            Instr::Pop(Loc::Reg(Rbp)),
+            Instr::Ret,
+        ]);
     }
 
     fn compile_expr(&mut self, cx: &Ctxt, dst: Loc, e: &Expr) {
@@ -118,15 +127,11 @@ impl Compiler {
                 check_dup_bindings(bindings);
                 let mut cx = cx.clone();
                 for (var, rhs) in bindings {
-                    self.compile_expr(&cx, Loc::Reg(Rax), rhs);
-                    self.append_instr(Instr::Push(Arg32::Reg(Rax)));
-                    cx = cx.next_local_with_name(*var);
+                    let (nextcx, mem) = cx.next_local();
+                    self.compile_expr(&cx, Loc::Mem(mem), rhs);
+                    cx = nextcx.add_binding(*var, mem);
                 }
                 self.compile_expr(&cx, dst, body);
-                self.append_instr(Instr::Add(BinArgs::ToReg(
-                    Rsp,
-                    Arg32::Imm((8 * bindings.len()) as i32),
-                )));
             }
             Expr::UnOp(op, e) => self.compile_un_op(cx, dst, *op, e),
             Expr::BinOp(op, e1, e2) => self.compile_bin_op(cx, dst, *op, e1, e2),
@@ -188,12 +193,18 @@ impl Compiler {
         self.compile_expr(cx, Loc::Reg(Rax), e);
         match op {
             Op1::Add1 => {
-                self.check_is_num(cx, Reg::Rax);
-                self.append_instr(Instr::Add(BinArgs::ToReg(Rax, 1.repr32())))
+                self.check_is_num(Reg::Rax);
+                self.append_instrs([
+                    Instr::Add(BinArgs::ToReg(Rax, 1.repr32())),
+                    Instr::Jo(JmpArg::Label(OVERFLOW_LBL.to_string())),
+                ])
             }
             Op1::Sub1 => {
-                self.check_is_num(cx, Reg::Rax);
-                self.append_instr(Instr::Sub(BinArgs::ToReg(Rax, 1.repr32())))
+                self.check_is_num(Reg::Rax);
+                self.append_instrs([
+                    Instr::Sub(BinArgs::ToReg(Rax, 1.repr32())),
+                    Instr::Jo(JmpArg::Label(OVERFLOW_LBL.to_string())),
+                ])
             }
             Op1::IsNum => {
                 self.append_instrs([
@@ -235,27 +246,23 @@ impl Compiler {
                     self.append_instr(Instr::Mov(MovArgs::ToMem(dst, Reg32::Imm(src))))
                 } else {
                     self.append_instrs([
-                        Instr::Mov(MovArgs::ToReg(R8, Arg64::Imm(src))),
-                        Instr::Mov(MovArgs::ToMem(dst, Reg32::Reg(R8))),
+                        Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Imm(src))),
+                        Instr::Mov(MovArgs::ToMem(dst, Reg32::Reg(Rcx))),
                     ])
                 }
             }
             (Loc::Mem(dst), Arg64::Mem(src)) => self.append_instrs([
-                Instr::Mov(MovArgs::ToReg(R8, Arg64::Mem(src))),
-                Instr::Mov(MovArgs::ToMem(dst, Reg32::Reg(Rbx))),
+                Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Mem(src))),
+                Instr::Mov(MovArgs::ToMem(dst, Reg32::Reg(Rcx))),
             ]),
         }
     }
 
     fn compile_bin_op(&mut self, cx: &Ctxt, dst: Loc, op: Op2, e1: &Expr, e2: &Expr) {
-        self.compile_expr(cx, Loc::Reg(Rax), e1);
-        let (newcx, mem) = cx.next_local();
-        self.append_instr(Instr::Push(Arg32::Reg(Rax)));
-        self.compile_expr(&newcx, Loc::Reg(Rbx), e2);
-        self.append_instrs([
-            Instr::Mov(MovArgs::ToReg(Rax, Arg64::Mem(mem))),
-            Instr::Add(BinArgs::ToReg(Rsp, Arg32::Imm(8))),
-        ]);
+        let (nextcx, mem) = cx.next_local();
+        self.compile_expr(cx, Loc::Mem(mem), e1);
+        self.compile_expr(&nextcx, Loc::Reg(Rbx), e2);
+        self.append_instr(Instr::Mov(MovArgs::ToReg(Rax, Arg64::Mem(mem))));
 
         match op {
             Op2::Plus
@@ -265,23 +272,37 @@ impl Compiler {
             | Op2::GreaterEqual
             | Op2::Less
             | Op2::LessEqual => {
-                self.check_is_num(&cx, Rax);
-                self.check_is_num(&cx, Rbx);
+                self.check_is_num(Rax);
+                self.check_is_num(Rbx);
             }
-            Op2::Equal => {}
+            Op2::Equal => {
+                self.append_instrs([
+                    Instr::Cmp(BinArgs::ToReg(Rcx, Arg32::Reg(Rax))),
+                    Instr::Xor(BinArgs::ToReg(Rcx, Arg32::Reg(Rbx))),
+                    Instr::Test(BinArgs::ToReg(Rcx, Arg32::Imm(1))),
+                    Instr::Jnz(JmpArg::Label(INVALID_ARG_LBL.to_string())),
+                ]);
+            }
         }
 
         match op {
             Op2::Plus => {
-                self.append_instr(Instr::Add(BinArgs::ToReg(Rax, Arg32::Reg(Rbx))));
+                self.append_instrs([
+                    Instr::Add(BinArgs::ToReg(Rax, Arg32::Reg(Rbx))),
+                    Instr::Jo(JmpArg::Label(OVERFLOW_LBL.to_string())),
+                ]);
             }
             Op2::Minus => {
-                self.append_instr(Instr::Sub(BinArgs::ToReg(Rax, Arg32::Reg(Rbx))));
+                self.append_instrs([
+                    Instr::Sub(BinArgs::ToReg(Rax, Arg32::Reg(Rbx))),
+                    Instr::Jo(JmpArg::Label(OVERFLOW_LBL.to_string())),
+                ]);
             }
             Op2::Times => {
                 self.append_instrs([
                     Instr::Sar(BinArgs::ToReg(Rax, Arg32::Imm(1))),
                     Instr::IMul(BinArgs::ToReg(Rax, Arg32::Reg(Rbx))),
+                    Instr::Jo(JmpArg::Label(OVERFLOW_LBL.to_string())),
                 ]);
             }
             Op2::Equal => self.compile_cmp(CMov::E),
@@ -302,7 +323,7 @@ impl Compiler {
         ]);
     }
 
-    fn check_is_num(&mut self, cx: &Ctxt, reg: Reg) {
+    fn check_is_num(&mut self, reg: Reg) {
         self.append_instrs([
             Instr::Test(BinArgs::ToReg(reg, Arg32::Imm(1))),
             Instr::Jnz(JmpArg::Label(INVALID_ARG_LBL.to_string())),

@@ -35,9 +35,9 @@ impl Parser {
 
     fn parse_expr(&self, e: &Sexp) -> Expr {
         match e {
-            Sexp::Atom(I(n)) => {
-                if n.checked_shl(1).is_some() {
-                    Expr::Number(*n)
+            &Sexp::Atom(I(n)) => {
+                if n >= -4611686018427387904 && n < 4611686018427387904 {
+                    Expr::Number(n)
                 } else {
                     syntax_error("integer literal overflow")
                 }
