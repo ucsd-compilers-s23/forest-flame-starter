@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     asm::{
@@ -6,12 +6,13 @@ use crate::{
         Reg::{self, *},
         Reg32,
     },
-    syntax::{Expr, FuncDecl, Op1, Op2, Prog, Symbol},
+    syntax::{Expr, FunDecl, Op1, Op2, Prog, Symbol},
 };
 
 struct Session {
     tag: u32,
     instrs: Vec<Instr>,
+    funs: HashMap<Symbol, usize>,
 }
 
 const INVALID_ARG_LBL: &str = "invalid_argument";
@@ -23,6 +24,7 @@ struct Ctxt<'a> {
     /// Number of local variables
     locals: u32,
     curr_lbl: Option<&'a str>,
+    in_fun: bool,
 }
 
 impl<'a> Ctxt<'a> {
@@ -31,10 +33,11 @@ impl<'a> Ctxt<'a> {
             locals: 0,
             curr_lbl: None,
             env: im::HashMap::default(),
+            in_fun: false,
         }
     }
 
-    fn with_params(params: &[Symbol]) -> Ctxt<'a> {
+    fn fun(params: &[Symbol]) -> Ctxt<'a> {
         let env = params
             .iter()
             .enumerate()
@@ -50,6 +53,7 @@ impl<'a> Ctxt<'a> {
             locals: 0,
             curr_lbl: None,
             env,
+            in_fun: true,
         }
     }
 
@@ -90,40 +94,44 @@ impl<'a> Ctxt<'a> {
 }
 
 pub fn compile(prg: &Prog) -> String {
-    let mut sess = Session::new();
-    let locals = prg.main.depth();
-    for fun in &prg.funcs {
-        sess.compile_fun(fun)
-    }
-    sess.append_instr(Instr::Label("our_code_starts_here".to_string()));
-    sess.fun_entry(locals, &[R14]);
-    sess.append_instr(Instr::Mov(MovArgs::ToReg(R14, Arg64::Reg(Rdi))));
-    sess.compile_expr(&Ctxt::new(), Loc::Reg(Rax), &prg.main);
-    sess.fun_exit(locals, &[R14]);
+    match fun_arity_map(prg) {
+        Ok(funs) => {
+            let mut sess = Session::new(funs);
+            let locals = prg.main.depth();
+            sess.compile_funs(&prg.funs);
+            sess.append_instr(Instr::Label("our_code_starts_here".to_string()));
+            sess.fun_entry(locals, &[R14]);
+            sess.append_instr(Instr::Mov(MovArgs::ToReg(R14, Arg64::Reg(Rdi))));
+            sess.compile_expr(&Ctxt::new(), Loc::Reg(Rax), &prg.main);
+            sess.fun_exit(locals, &[R14]);
 
-    format!(
-        "
+            format!(
+                "
 section .text
 extern snek_error
 extern snek_print
 global our_code_starts_here
 {}
 {INVALID_ARG_LBL}:
-  mov edi, 1
-  call snek_error
+mov edi, 1
+call snek_error
 {OVERFLOW_LBL}:
-  mov edi, 2
-  call snek_error
+mov edi, 2
+call snek_error
 ",
-        instrs_to_string(&sess.instrs)
-    )
+                instrs_to_string(&sess.instrs)
+            )
+        }
+        Err(dup) => raise_duplicate_function(dup),
+    }
 }
 
 impl Session {
-    fn new() -> Session {
+    fn new(funs: HashMap<Symbol, usize>) -> Session {
         Session {
             tag: 0,
             instrs: vec![],
+            funs,
         }
     }
 
@@ -151,11 +159,18 @@ impl Session {
         ]);
     }
 
-    fn compile_fun(&mut self, fun: &FuncDecl) {
+    fn compile_funs(&mut self, funs: &[FunDecl]) {
+        for fun in funs {
+            self.compile_fun(fun)
+        }
+    }
+
+    fn compile_fun(&mut self, fun: &FunDecl) {
+        check_dup_bindings(&fun.params);
         let locals = fun.body.depth();
         self.append_instr(Instr::Label(format!("fun_start_{}", fun.name)));
         self.fun_entry(locals, &[]);
-        self.compile_expr(&Ctxt::with_params(&fun.params), Loc::Reg(Rax), &fun.body);
+        self.compile_expr(&Ctxt::fun(&fun.params), Loc::Reg(Rax), &fun.body);
         self.fun_exit(locals, &[]);
     }
 
@@ -165,7 +180,7 @@ impl Session {
             Expr::Boolean(b) => self.move_to(dst, b.repr64()),
             Expr::Var(x) => self.move_to(dst, Arg32::Mem(cx.lookup(*x))),
             Expr::Let(bindings, body) => {
-                check_dup_bindings(bindings);
+                check_dup_bindings(bindings.iter().map(|(id, _)| id));
                 let mut cx = cx.clone();
                 for (var, rhs) in bindings {
                     let (nextcx, mem) = cx.next_local();
@@ -226,6 +241,13 @@ impl Session {
                 self.compile_expr(cx, dst, &es[es.len() - 1]);
             }
             Expr::Call(fun, args) => {
+                let Some(arity) = self.funs.get(fun) else {
+                    return raise_undefined_fun(*fun);
+                };
+                if args.len() != *arity {
+                    raise_worng_number_of_args(*arity, args.len());
+                }
+
                 let nargs = align_args(args.len()) as i32;
                 self.append_instr(Instr::Sub(BinArgs::ToReg(Rsp, Arg32::Imm(8 * nargs))));
                 for (i, arg) in args.iter().enumerate() {
@@ -241,7 +263,13 @@ impl Session {
                 ]);
                 self.move_to(dst, Arg64::Reg(Rax));
             }
-            Expr::Input => self.move_to(dst, Arg32::Reg(R14)),
+            Expr::Input => {
+                if cx.in_fun {
+                    raise_input_in_fun()
+                } else {
+                    self.move_to(dst, Arg32::Reg(R14))
+                }
+            }
         }
     }
 
@@ -450,9 +478,19 @@ impl Repr32 for bool {
     }
 }
 
-fn check_dup_bindings(bindings: &[(Symbol, Expr)]) {
+fn fun_arity_map(prg: &Prog) -> Result<HashMap<Symbol, usize>, Symbol> {
+    let mut map = HashMap::new();
+    for fun in &prg.funs {
+        if map.insert(fun.name, fun.params.len()).is_some() {
+            return Err(fun.name);
+        }
+    }
+    Ok(map)
+}
+
+fn check_dup_bindings<'a>(bindings: impl IntoIterator<Item = &'a Symbol>) {
     let mut seen = HashSet::new();
-    for (name, _) in bindings {
+    for name in bindings {
         if !seen.insert(*name) {
             raise_duplicate_binding(*name);
         }
@@ -463,10 +501,26 @@ fn raise_duplicate_binding(id: Symbol) {
     panic!("duplicate binding {id}");
 }
 
+fn raise_duplicate_function<T>(name: Symbol) -> T {
+    panic!("duplicate function name {name}")
+}
+
 fn raise_unbound_identifier<T>(id: Symbol) -> T {
     panic!("unbound variable identifier {id}")
 }
 
 fn raise_break_outside_loop() {
     panic!("break outside loop")
+}
+
+fn raise_input_in_fun<T>() -> T {
+    panic!("cannot use input inside function definition")
+}
+
+fn raise_undefined_fun(fun: Symbol) {
+    panic!("function {fun} not defined")
+}
+
+fn raise_worng_number_of_args(expected: usize, got: usize) {
+    panic!("function takes {expected} arguments but {got} were supplied")
 }

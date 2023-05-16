@@ -1,16 +1,16 @@
-use std::fmt;
+use std::{collections::HashSet, fmt};
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub struct Symbol(&'static str);
 
 #[derive(Debug)]
 pub struct Prog {
-    pub funcs: Vec<FuncDecl>,
+    pub funs: Vec<FunDecl>,
     pub main: Expr,
 }
 
 #[derive(Debug)]
-pub struct FuncDecl {
+pub struct FunDecl {
     pub name: Symbol,
     pub params: Vec<Symbol>,
     pub body: Expr,

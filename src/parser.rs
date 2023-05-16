@@ -1,7 +1,7 @@
 use regex::Regex;
 use sexp::{Atom::*, Sexp};
 
-use crate::syntax::{Expr, FuncDecl, Op1, Op2, Prog, Symbol};
+use crate::syntax::{Expr, FunDecl, Op1, Op2, Prog, Symbol};
 
 pub fn parse(s: &str) -> Prog {
     let s = format!("({})", s);
@@ -27,7 +27,7 @@ impl Parser {
         if let [funcs @ .., main] = &es[..] {
             let funcs = funcs.iter().map(|e| self.parse_func(e)).collect();
             let main = self.parse_expr(main);
-            Prog { funcs, main }
+            Prog { funs: funcs, main }
         } else {
             syntax_error("program must contain a main expression")
         }
@@ -166,7 +166,7 @@ impl Parser {
         }
     }
 
-    fn parse_func(&self, e: &Sexp) -> FuncDecl {
+    fn parse_func(&self, e: &Sexp) -> FunDecl {
         let Sexp::List(es) = e else {
             return syntax_error("expected a list");
         };
@@ -177,7 +177,7 @@ impl Parser {
                 };
                 let params = params.iter().map(|e| self.parse_identifier(e)).collect();
                 let body = self.parse_expr(body);
-                FuncDecl {
+                FunDecl {
                     name: Symbol::new(name),
                     params,
                     body,
