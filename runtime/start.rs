@@ -89,9 +89,9 @@ pub unsafe extern "C" fn snek_alloc_vec(
     heap_ptr: *mut u64,
     count: usize,
     elem: SnekVal,
-) -> u64 {
-    let heap_ptr = if heap_ptr.sub(count + 16) >= heap_start {
-        heap_ptr.sub(count + 16)
+) -> *mut u64 {
+    let heap_ptr = if heap_ptr.sub(count + 2) >= heap_start {
+        heap_ptr.sub(count + 2)
     } else {
         try_gc(heap_start, heap_end, heap_ptr, count)
     };
@@ -99,7 +99,7 @@ pub unsafe extern "C" fn snek_alloc_vec(
     for i in 0..count {
         heap_ptr.add(2 + i as usize).write(elem);
     }
-    (heap_ptr as u64) ^ 1
+    heap_ptr
 }
 
 fn parse_input(input: &str) -> u64 {
@@ -115,7 +115,7 @@ fn main() {
     let input = if args.len() == 2 { &args[1] } else { "false" };
     let input = parse_input(&input);
 
-    let heap_size = 1000000;
+    let heap_size = 10000;
 
     let mut heap: Vec<u64> = Vec::with_capacity(heap_size);
     let heap_start = heap.as_mut_ptr();

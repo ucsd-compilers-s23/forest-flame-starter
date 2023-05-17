@@ -328,6 +328,8 @@ impl Session {
                     // count is already in RCX
                     // elem is already in R8
                     Instr::Call("snek_alloc_vec".to_string()),
+                    Instr::Mov(MovArgs::ToReg(HEAP_PTR, Arg64::Reg(Rax))),
+                    Instr::Add(BinArgs::ToReg(Rax, Arg32::Imm(1))),
                 ]);
                 self.move_to(dst, Arg64::Reg(Rax));
             }
