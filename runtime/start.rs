@@ -104,7 +104,7 @@ pub unsafe extern "C" fn snek_alloc_vec(size: SnekVal, elem: SnekVal) -> SnekVal
         snek_error(ErrCode::InvalidArgument);
     }
     // Check the size is non-negative
-    if size < 0 {
+    if (size as i64) < 0 {
         snek_error(ErrCode::InvalidVecSize);
     }
     let size = (size >> 1) as usize;
@@ -113,8 +113,8 @@ pub unsafe extern "C" fn snek_alloc_vec(size: SnekVal, elem: SnekVal) -> SnekVal
     let ptr = alloc(size + 1) as *mut u64;
 
     // Write size of the vector and fill it with the given element
-    ptr.add(1).write(count as u64);
-    for i in 0..count {
+    ptr.add(1).write(size as u64);
+    for i in 0..size {
         ptr.add(2 + i).write(elem);
     }
     (ptr as u64) ^ 1
