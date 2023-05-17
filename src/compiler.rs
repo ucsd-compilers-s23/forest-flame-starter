@@ -18,12 +18,10 @@ struct Session {
 const INVALID_ARG_LBL: &str = "invalid_argument";
 const OVERFLOW_LBL: &str = "overflow";
 const INDEX_OUT_OF_BOUNDS: &str = "index_out_of_bounds";
-const NEGATIVE_SIZE: &str = "negative_size";
-const CALLE_SAVED_REGS: &[Reg] = &[Rbx, R12, R13, R14, R15];
+
 const INPUT_REG: Reg = R12;
-const HEAP_START_REG: Reg = R13;
-const HEAP_END_REG: Reg = R14;
-const HEAP_PTR: Reg = R15;
+const CALLE_SAVED_REGS: &[Reg] = &[INPUT_REG];
+
 const MEM_SET_VAL: i32 = 0;
 
 #[derive(Debug, Clone)]
@@ -108,12 +106,7 @@ pub fn compile(prg: &Prog) -> String {
             sess.compile_funs(&prg.funs);
             sess.append_instr(Instr::Label("our_code_starts_here".to_string()));
             sess.fun_entry(locals, CALLE_SAVED_REGS);
-            sess.append_instrs([
-                Instr::Mov(MovArgs::ToReg(INPUT_REG, Arg64::Reg(Rdi))),
-                Instr::Mov(MovArgs::ToReg(HEAP_START_REG, Arg64::Reg(Rsi))),
-                Instr::Mov(MovArgs::ToReg(HEAP_END_REG, Arg64::Reg(Rdx))),
-                Instr::Mov(MovArgs::ToReg(HEAP_PTR, Arg64::Reg(Rdx))),
-            ]);
+            sess.append_instrs([Instr::Mov(MovArgs::ToReg(INPUT_REG, Arg64::Reg(Rdi)))]);
             sess.compile_expr(&Ctxt::new(), Loc::Reg(Rax), &prg.main);
             sess.fun_exit(locals, CALLE_SAVED_REGS);
 
@@ -133,9 +126,6 @@ global our_code_starts_here
   call snek_error
 {INDEX_OUT_OF_BOUNDS}:
   mov edi, 3
-  call snek_error
-{NEGATIVE_SIZE}:
-  mov edi, 4
   call snek_error
 ",
                 instrs_to_string(&sess.instrs)
@@ -311,26 +301,10 @@ impl Session {
             Expr::VecNew(size, elem) => {
                 let (nextcx, size_mem) = cx.next_local();
                 self.compile_expr(cx, Loc::Mem(size_mem), size);
-                self.compile_expr(&nextcx, Loc::Reg(R8), elem);
-                self.append_instrs([
-                    Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Mem(size_mem))),
-                    Instr::Mov(MovArgs::ToMem(size_mem, Reg32::Imm(MEM_SET_VAL))),
-                ]);
+                self.compile_expr(&nextcx, Loc::Reg(Rsi), elem);
+                self.append_instr(Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Mem(size_mem))));
                 self.memset(cx.si + 1, 1, Reg32::Imm(MEM_SET_VAL));
-                self.check_is_num(Rcx);
-                self.append_instrs([
-                    Instr::Sar(BinArgs::ToReg(Rcx, Arg32::Imm(1))),
-                    Instr::Cmp(BinArgs::ToReg(Rcx, Arg32::Imm(0))),
-                    Instr::Jl(NEGATIVE_SIZE.to_string()),
-                    Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Reg(HEAP_START_REG))), // heap_start
-                    Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(HEAP_END_REG))),   // heap_end
-                    Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(HEAP_PTR))),       // heap_ptr
-                    // count is already in RCX
-                    // elem is already in R8
-                    Instr::Call("snek_alloc_vec".to_string()),
-                    Instr::Mov(MovArgs::ToReg(HEAP_PTR, Arg64::Reg(Rax))),
-                    Instr::Add(BinArgs::ToReg(Rax, Arg32::Imm(1))),
-                ]);
+                self.append_instr(Instr::Call("snek_alloc_vec".to_string()));
                 self.move_to(dst, Arg64::Reg(Rax));
             }
             Expr::VecSet(vec, idx, elem) => {
