@@ -82,7 +82,7 @@ unsafe fn try_gc(
     std::process::exit(ErrCode::OutOfMemory as i32)
 }
 
-#[export_name = "\x01snek_alloc"]
+#[export_name = "\x01snek_alloc_vec"]
 pub unsafe extern "C" fn snek_alloc_vec(
     heap_start: *mut u64,
     heap_end: *mut u64,

@@ -122,7 +122,7 @@ pub fn compile(prg: &Prog) -> String {
 section .text
 extern snek_error
 extern snek_print
-extern snek_alloc
+extern snek_alloc_vec
 global our_code_starts_here
 {}
 {INVALID_ARG_LBL}:
@@ -327,7 +327,7 @@ impl Session {
                     Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(HEAP_PTR))),       // heap_ptr
                     // count is already in RCX
                     // elem is already in R8
-                    Instr::Call("snek_alloc".to_string()),
+                    Instr::Call("snek_alloc_vec".to_string()),
                 ]);
                 self.move_to(dst, Arg64::Reg(Rax));
             }
