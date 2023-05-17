@@ -90,14 +90,14 @@ pub unsafe extern "C" fn snek_alloc_vec(
     count: usize,
     elem: SnekVal,
 ) -> *mut u64 {
-    let heap_ptr = if heap_ptr >= heap_start.wrapping_add(count + 2) {
+    let heap_ptr = if heap_ptr.offset_from(heap_start) >= count as isize + 2 {
         heap_ptr.sub(count + 2)
     } else {
         try_gc(heap_start, heap_end, heap_ptr, count)
     };
     heap_ptr.add(1).write(count as u64);
     for i in 0..count {
-        heap_ptr.add(2 + i as usize).write(elem);
+        heap_ptr.add(2 + i).write(elem);
     }
     heap_ptr
 }
