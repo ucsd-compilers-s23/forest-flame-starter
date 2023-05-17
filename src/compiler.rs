@@ -19,10 +19,10 @@ const INVALID_ARG_LBL: &str = "invalid_argument";
 const OVERFLOW_LBL: &str = "overflow";
 const INDEX_OUT_OF_BOUNDS: &str = "index_out_of_bounds";
 
+const STACK_BASE_REG: Reg = Rbx;
 const INPUT_REG: Reg = R12;
-const CALLE_SAVED_REGS: &[Reg] = &[INPUT_REG];
 
-const MEM_SET_VAL: i32 = 0;
+const MEM_SET_VAL: i32 = 0b001;
 
 #[derive(Debug, Clone)]
 struct Ctxt<'a> {
@@ -105,10 +105,13 @@ pub fn compile(prg: &Prog) -> String {
             let locals = prg.main.depth();
             sess.compile_funs(&prg.funs);
             sess.append_instr(Instr::Label("our_code_starts_here".to_string()));
-            sess.fun_entry(locals, CALLE_SAVED_REGS);
-            sess.append_instrs([Instr::Mov(MovArgs::ToReg(INPUT_REG, Arg64::Reg(Rdi)))]);
+            sess.fun_entry(locals, &[STACK_BASE_REG, INPUT_REG]);
+            sess.append_instrs([
+                Instr::Mov(MovArgs::ToReg(INPUT_REG, Arg64::Reg(Rdi))),
+                Instr::Mov(MovArgs::ToReg(STACK_BASE_REG, Arg64::Reg(Rbp))),
+            ]);
             sess.compile_expr(&Ctxt::new(), Loc::Reg(Rax), &prg.main);
-            sess.fun_exit(locals, CALLE_SAVED_REGS);
+            sess.fun_exit(locals, &[STACK_BASE_REG, INPUT_REG]);
 
             format!(
                 "
@@ -116,6 +119,7 @@ section .text
 extern snek_error
 extern snek_print
 extern snek_alloc_vec
+extern snek_print_stack
 global our_code_starts_here
 {}
 {INVALID_ARG_LBL}:
@@ -304,7 +308,11 @@ impl Session {
                 self.compile_expr(&nextcx, Loc::Reg(Rsi), elem);
                 self.append_instr(Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Mem(size_mem))));
                 self.memset(cx.si + 1, 1, Reg32::Imm(MEM_SET_VAL));
-                self.append_instr(Instr::Call("snek_alloc_vec".to_string()));
+                self.append_instrs([
+                    Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(STACK_BASE_REG))),
+                    Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rsp))),
+                    Instr::Call("snek_alloc_vec".to_string()),
+                ]);
                 self.move_to(dst, Arg64::Reg(Rax));
             }
             Expr::VecSet(vec, idx, elem) => {
@@ -350,10 +358,18 @@ impl Session {
                 ]);
                 self.move_to(dst, Arg64::Reg(Rax));
             }
+            Expr::PrintStack => {
+                self.append_instrs([
+                    Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Reg(STACK_BASE_REG))),
+                    Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(Rsp))),
+                    Instr::Call("snek_print_stack".to_string()),
+                ]);
+                self.move_to(dst, 0.repr32());
+            }
         }
     }
 
-    fn compile_un_op(&mut self, cx: &Ctxt, target: Loc, op: Op1, e: &Expr) {
+    fn compile_un_op(&mut self, cx: &Ctxt, dst: Loc, op: Op1, e: &Expr) {
         self.compile_expr(cx, Loc::Reg(Rax), e);
         match op {
             Op1::Add1 => {
@@ -393,7 +409,7 @@ impl Session {
                 Instr::Call("snek_print".to_string()),
             ]),
         }
-        self.move_to(target, Arg32::Reg(Rax));
+        self.move_to(dst, Arg32::Reg(Rax));
     }
 
     fn move_to(&mut self, dst: Loc, src: impl Into<Arg64>) {

@@ -33,6 +33,7 @@ pub enum Expr {
     Block(Vec<Expr>),
     Call(Symbol, Vec<Expr>),
     Input,
+    PrintStack,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -80,6 +81,7 @@ impl Expr {
             Expr::UnOp(_, e) | Expr::Loop(e) | Expr::Break(e) | Expr::Set(_, e) => e.depth(),
             Expr::VecNew(size, elem) => u32::max(size.depth(), elem.depth() + 1),
             Expr::VecSet(vec, idx, val) => vec.depth().max(idx.depth() + 1).max(val.depth() + 2),
+            Expr::PrintStack => 0,
         }
     }
 }

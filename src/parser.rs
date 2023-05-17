@@ -46,6 +46,7 @@ impl Parser {
                 "true" => Expr::Boolean(true),
                 "false" => Expr::Boolean(false),
                 "input" => Expr::Input,
+                "printstack" => Expr::PrintStack,
                 _ => Expr::Var(Symbol::new(id)),
             },
             Sexp::List(vec) => match &vec[..] {
@@ -237,6 +238,7 @@ fn is_keyword(s: &str) -> bool {
             | "fun"
             | "vec"
             | "vecset!"
+            | "printstack"
     )
 }
 

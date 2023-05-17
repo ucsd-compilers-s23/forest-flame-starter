@@ -77,17 +77,17 @@ pub unsafe extern "C" fn snek_print(val: SnekVal) -> SnekVal {
     val
 }
 
-unsafe fn try_gc(count: usize) -> *const u64 {
+unsafe fn try_gc(count: usize, stack_start: *const u64, stack_end: *const u64) -> *const u64 {
     eprintln!("out of memory");
     std::process::exit(ErrCode::OutOfMemory as i32)
 }
 
-unsafe fn alloc(count: usize) -> *mut u64 {
+unsafe fn alloc(count: usize, stack_start: *const u64, stack_end: *const u64) -> *mut u64 {
     // Allocate 1 extra word to store GC metadata
     HEAP_PTR = if HEAP_PTR.offset_from(HEAP_START) >= count as isize + 1 {
         HEAP_PTR.sub(count + 1)
     } else {
-        try_gc(count)
+        try_gc(count, stack_start, stack_end)
     };
     let ptr = HEAP_PTR as *mut u64;
 
@@ -98,7 +98,12 @@ unsafe fn alloc(count: usize) -> *mut u64 {
 }
 
 #[export_name = "\x01snek_alloc_vec"]
-pub unsafe extern "C" fn snek_alloc_vec(size: SnekVal, elem: SnekVal) -> SnekVal {
+pub unsafe extern "C" fn snek_alloc_vec(
+    size: SnekVal,
+    elem: SnekVal,
+    stack_start: *const u64,
+    stack_end: *const u64,
+) -> SnekVal {
     // Check the size is a number
     if size & 1 != 0 {
         snek_error(ErrCode::InvalidArgument);
@@ -110,14 +115,26 @@ pub unsafe extern "C" fn snek_alloc_vec(size: SnekVal, elem: SnekVal) -> SnekVal
     let size = (size >> 1) as usize;
 
     // Allocate `size + 1` 8 byte words to account for size of the vector
-    let ptr = alloc(size + 1) as *mut u64;
+    let ptr = alloc(size + 1, stack_start, stack_end) as *mut u64;
 
     // Write size of the vector and fill it with the given element
-    ptr.add(1).write(count as u64);
-    for i in 0..count {
+    ptr.add(1).write(size as u64);
+    for i in 0..size {
         ptr.add(2 + i).write(elem);
     }
     (ptr as u64) ^ 1
+}
+
+#[export_name = "\x01snek_print_stack"]
+unsafe fn snek_print_stack(stack_start: *const u64, stack_end: *const u64) {
+    let mut ptr = stack_start;
+    println!("-----------------------------------------");
+    while ptr >= stack_end {
+        let val = *ptr;
+        println!("{ptr:?}: {:#0x}", val);
+        ptr = ptr.sub(1);
+    }
+    println!("-----------------------------------------");
 }
 
 fn parse_input(input: &str) -> u64 {
