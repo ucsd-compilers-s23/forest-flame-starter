@@ -24,6 +24,7 @@ const INPUT_REG: Reg = R12;
 const HEAP_START_REG: Reg = R13;
 const HEAP_END_REG: Reg = R14;
 const HEAP_PTR: Reg = R15;
+const MEM_SET_VAL: i32 = 0;
 
 #[derive(Debug, Clone)]
 struct Ctxt<'a> {
@@ -163,6 +164,7 @@ impl Session {
             Instr::Mov(MovArgs::ToReg(Rbp, Arg64::Reg(Rsp))),
             Instr::Sub(BinArgs::ToReg(Rsp, Arg32::Imm(8 * (size as i32)))),
         ]);
+        self.memset(0, size, Reg32::Imm(MEM_SET_VAL));
     }
 
     fn fun_exit(&mut self, locals: u32, calle_saved: &[Reg]) {
@@ -175,6 +177,16 @@ impl Session {
             Instr::Pop(Loc::Reg(Rbp)),
             Instr::Ret,
         ]);
+    }
+
+    fn memset(&mut self, start: u32, count: u32, elem: Reg32) {
+        for i in start..start + count {
+            let mem = MemRef {
+                reg: Rbp,
+                offset: Offset::Constant(-(8 * (i as i32 + 1))),
+            };
+            self.append_instr(Instr::Mov(MovArgs::ToMem(mem, elem)));
+        }
     }
 
     fn compile_funs(&mut self, funs: &[FunDecl]) {
@@ -199,13 +211,14 @@ impl Session {
             Expr::Var(x) => self.move_to(dst, Arg32::Mem(cx.lookup(*x))),
             Expr::Let(bindings, body) => {
                 check_dup_bindings(bindings.iter().map(|(id, _)| id));
-                let mut cx = cx.clone();
+                let mut currcx = cx.clone();
                 for (var, rhs) in bindings {
-                    let (nextcx, mem) = cx.next_local();
-                    self.compile_expr(&cx, Loc::Mem(mem), rhs);
-                    cx = nextcx.add_binding(*var, mem);
+                    let (nextcx, mem) = currcx.next_local();
+                    self.compile_expr(&currcx, Loc::Mem(mem), rhs);
+                    currcx = nextcx.add_binding(*var, mem);
                 }
-                self.compile_expr(&cx, dst, body);
+                self.compile_expr(&currcx, dst, body);
+                self.memset(cx.si + 1, bindings.len() as u32, Reg32::Imm(MEM_SET_VAL));
             }
             Expr::UnOp(op, e) => self.compile_un_op(cx, dst, *op, e),
             Expr::BinOp(op, e1, e2) => self.compile_bin_op(cx, dst, *op, e1, e2),
@@ -260,8 +273,21 @@ impl Session {
                     raise_worng_number_of_args(*arity, args.len());
                 }
 
-                let nargs = align_args(args.len()) as i32;
-                self.append_instr(Instr::Sub(BinArgs::ToReg(Rsp, Arg32::Imm(8 * nargs))));
+                let mut nargs = args.len() as i32;
+                if nargs % 2 == 0 {
+                    self.append_instr(Instr::Sub(BinArgs::ToReg(Rsp, Arg32::Imm(8 * nargs))));
+                } else {
+                    let mem = MemRef {
+                        reg: Rsp,
+                        offset: Offset::Constant(8 * nargs),
+                    };
+                    nargs += 1;
+                    self.append_instrs([
+                        Instr::Sub(BinArgs::ToReg(Rsp, Arg32::Imm(8 * nargs))),
+                        Instr::Mov(MovArgs::ToMem(mem, Reg32::Imm(MEM_SET_VAL))),
+                    ]);
+                }
+
                 for (i, arg) in args.iter().enumerate() {
                     let mem = MemRef {
                         reg: Rsp,
@@ -286,7 +312,11 @@ impl Session {
                 let (nextcx, size_mem) = cx.next_local();
                 self.compile_expr(cx, Loc::Mem(size_mem), size);
                 self.compile_expr(&nextcx, Loc::Reg(R8), elem);
-                self.append_instr(Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Mem(size_mem))));
+                self.append_instrs([
+                    Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Mem(size_mem))),
+                    Instr::Mov(MovArgs::ToMem(size_mem, Reg32::Imm(MEM_SET_VAL))),
+                ]);
+                self.memset(cx.si + 1, 1, Reg32::Imm(MEM_SET_VAL));
                 self.check_is_num(Rcx);
                 self.append_instrs([
                     Instr::Sar(BinArgs::ToReg(Rcx, Arg32::Imm(1))),
@@ -313,6 +343,7 @@ impl Session {
                     Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Mem(vec_mem))),
                     Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Mem(idx_mem))),
                 ]);
+                self.memset(cx.si + 1, 2, Reg32::Imm(MEM_SET_VAL));
                 self.check_is_vec(Rdx);
                 self.check_is_num(Rsi);
                 self.append_instrs([
@@ -422,6 +453,7 @@ impl Session {
         self.compile_expr(cx, Loc::Mem(mem), e1);
         self.compile_expr(&nextcx, Loc::Reg(Rcx), e2);
         self.append_instr(Instr::Mov(MovArgs::ToReg(Rax, Arg64::Mem(mem))));
+        self.memset(cx.si + 1, 1, Reg32::Imm(MEM_SET_VAL));
 
         match op {
             Op2::Plus
@@ -494,7 +526,7 @@ impl Session {
             Instr::Test(BinArgs::ToReg(reg, Arg32::Imm(0b001))),
             Instr::Jz(INVALID_ARG_LBL.to_string()), // jump if is num
             Instr::Test(BinArgs::ToReg(reg, Arg32::Imm(0b010))),
-            Instr::Jz(INVALID_ARG_LBL.to_string()), // jump if is bool
+            Instr::Jnz(INVALID_ARG_LBL.to_string()), // jump if is bool
         ]);
     }
 
@@ -509,14 +541,6 @@ impl Session {
     fn next_tag(&mut self) -> u32 {
         self.tag = self.tag.checked_add(1).unwrap();
         self.tag - 1
-    }
-}
-
-fn align_args(n: usize) -> usize {
-    if n % 2 == 0 {
-        n
-    } else {
-        n + 1
     }
 }
 
