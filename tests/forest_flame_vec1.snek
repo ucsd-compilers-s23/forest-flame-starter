@@ -1,0 +1,7 @@
+(let ((v (vec 5 0)))
+    (block
+        (vecset! v 0 1)
+        (vecset! v 1 2)
+        (vecset! v 2 3)
+        (vecset! v 3 4)
+	v))
