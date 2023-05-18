@@ -105,13 +105,13 @@ pub fn compile(prg: &Prog) -> String {
             let locals = prg.main.depth();
             sess.compile_funs(&prg.funs);
             sess.append_instr(Instr::Label("our_code_starts_here".to_string()));
-            sess.fun_entry(locals, &[STACK_BASE_REG, INPUT_REG]);
+            sess.fun_entry(locals, &[Rbp, STACK_BASE_REG, INPUT_REG]);
             sess.append_instrs([
                 Instr::Mov(MovArgs::ToReg(INPUT_REG, Arg64::Reg(Rdi))),
                 Instr::Mov(MovArgs::ToReg(STACK_BASE_REG, Arg64::Reg(Rbp))),
             ]);
             sess.compile_expr(&Ctxt::new(), Loc::Reg(Rax), &prg.main);
-            sess.fun_exit(locals, &[STACK_BASE_REG, INPUT_REG]);
+            sess.fun_exit(locals, &[Rbp, STACK_BASE_REG, INPUT_REG]);
 
             format!(
                 "
@@ -154,7 +154,6 @@ impl Session {
             self.append_instr(Instr::Push(Arg32::Reg(*reg)));
         }
         self.append_instrs([
-            Instr::Push(Arg32::Reg(Rbp)),
             Instr::Mov(MovArgs::ToReg(Rbp, Arg64::Reg(Rsp))),
             Instr::Sub(BinArgs::ToReg(Rsp, Arg32::Imm(8 * (size as i32)))),
         ]);
@@ -163,14 +162,14 @@ impl Session {
 
     fn fun_exit(&mut self, locals: u32, calle_saved: &[Reg]) {
         let size = stack_size(locals, calle_saved);
+        self.append_instrs([Instr::Add(BinArgs::ToReg(
+            Rsp,
+            Arg32::Imm(8 * (size as i32)),
+        ))]);
         for reg in calle_saved.iter().rev() {
             self.append_instr(Instr::Pop(Loc::Reg(*reg)));
         }
-        self.append_instrs([
-            Instr::Add(BinArgs::ToReg(Rsp, Arg32::Imm(8 * (size as i32)))),
-            Instr::Pop(Loc::Reg(Rbp)),
-            Instr::Ret,
-        ]);
+        self.append_instr(Instr::Ret);
     }
 
     fn memset(&mut self, start: u32, count: u32, elem: Reg32) {
@@ -193,9 +192,9 @@ impl Session {
         check_dup_bindings(&fun.params);
         let locals = fun.body.depth();
         self.append_instr(Instr::Label(format!("fun_start_{}", fun.name)));
-        self.fun_entry(locals, &[]);
+        self.fun_entry(locals, &[Rbp]);
         self.compile_expr(&Ctxt::fun(&fun.params), Loc::Reg(Rax), &fun.body);
-        self.fun_exit(locals, &[]);
+        self.fun_exit(locals, &[Rbp]);
     }
 
     fn compile_expr(&mut self, cx: &Ctxt, dst: Loc, e: &Expr) {
@@ -538,7 +537,8 @@ impl Session {
 }
 
 fn stack_size(locals: u32, calle_saved: &[Reg]) -> u32 {
-    let n = locals + calle_saved.len() as u32;
+    // #locals + #callee saved + return address
+    let n = locals + calle_saved.len() as u32 + 1;
     if n % 2 == 0 {
         locals
     } else {
