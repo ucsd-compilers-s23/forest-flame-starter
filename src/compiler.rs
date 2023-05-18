@@ -297,24 +297,47 @@ impl Session {
 
                 self.compile_expr(cx, Loc::Mem(vec_mem), vec);
                 self.compile_expr(&nextcx1, Loc::Mem(idx_mem), idx);
-                self.compile_expr(&nextcx2, Loc::Reg(Rax), elem);
+                self.compile_expr(&nextcx2, Loc::Reg(Rsi), elem);
 
                 self.emit_instrs([
-                    Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Mem(vec_mem))),
-                    Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Mem(idx_mem))),
+                    Instr::Mov(MovArgs::ToReg(Rax, Arg64::Mem(vec_mem))),
+                    Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Mem(idx_mem))),
                 ]);
                 self.memset(cx.si, 2, Reg32::Imm(MEM_SET_VAL));
-                self.check_is_vec(Rdx);
-                self.check_is_num(Rsi);
+                self.check_is_vec(Rax);
+                self.check_is_num(Rdi);
                 self.emit_instrs([
-                    Instr::Sub(BinArgs::ToReg(Rdx, Arg32::Imm(1))),
-                    Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Mem(mref![Rdx + 8]))),
-                    Instr::Sar(BinArgs::ToReg(Rsi, Arg32::Imm(1))),
-                    Instr::Cmp(BinArgs::ToReg(Rsi, Arg32::Imm(0))),
+                    Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rax))),
+                    Instr::Sub(BinArgs::ToReg(Rcx, Arg32::Imm(1))),
+                    Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Mem(mref![Rcx + 8]))),
+                    Instr::Sar(BinArgs::ToReg(Rdi, Arg32::Imm(1))),
+                    Instr::Cmp(BinArgs::ToReg(Rdi, Arg32::Imm(0))),
                     Instr::Jl(INDEX_OUT_OF_BOUNDS.to_string()),
-                    Instr::Cmp(BinArgs::ToReg(Rsi, Arg32::Reg(Rcx))),
+                    Instr::Cmp(BinArgs::ToReg(Rdi, Arg32::Reg(Rcx))),
                     Instr::Jge(INDEX_OUT_OF_BOUNDS.to_string()),
-                    Instr::Mov(MovArgs::ToMem(mref![Rdx + 8 * Rsi + 16], Reg32::Reg(Rax))),
+                    Instr::Mov(MovArgs::ToMem(mref![Rcx + 8 * Rdi + 16], Reg32::Reg(Rsi))),
+                ]);
+                self.move_to(dst, Arg64::Reg(Rax));
+            }
+            Expr::VecGet(vec, idx) => {
+                let (nextcx, vec_mem) = cx.next_local();
+
+                self.compile_expr(cx, Loc::Mem(vec_mem), vec);
+                self.compile_expr(&nextcx, Loc::Reg(Rdi), idx);
+
+                self.emit_instrs([Instr::Mov(MovArgs::ToReg(Rax, Arg64::Mem(vec_mem)))]);
+                self.memset(cx.si, 1, Reg32::Imm(MEM_SET_VAL));
+                self.check_is_vec(Rax);
+                self.check_is_num(Rdi);
+                self.emit_instrs([
+                    Instr::Sub(BinArgs::ToReg(Rax, Arg32::Imm(1))),
+                    Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Mem(mref![Rax + 8]))),
+                    Instr::Sar(BinArgs::ToReg(Rdi, Arg32::Imm(1))),
+                    Instr::Cmp(BinArgs::ToReg(Rdi, Arg32::Imm(0))),
+                    Instr::Jl(INDEX_OUT_OF_BOUNDS.to_string()),
+                    Instr::Cmp(BinArgs::ToReg(Rdi, Arg32::Reg(Rcx))),
+                    Instr::Jge(INDEX_OUT_OF_BOUNDS.to_string()),
+                    Instr::Mov(MovArgs::ToReg(Rax, Arg64::Mem(mref![Rax + 8 * Rdi + 16]))),
                 ]);
                 self.move_to(dst, Arg64::Reg(Rax));
             }

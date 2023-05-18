@@ -59,15 +59,24 @@ impl Parser {
                     let elem = self.parse_expr(elem);
                     Expr::VecNew(Box::new(size), Box::new(elem))
                 }
-                // (vecset! idx elem)
-                [Sexp::Atom(S(keyword)), es @ ..] if keyword == "vecset!" => {
+                // (vec-set! idx elem)
+                [Sexp::Atom(S(keyword)), es @ ..] if keyword == "vec-set!" => {
                     let [vec, size, elem] = &es[..] else {
-                        return syntax_error("malformed vecset!");
+                        return syntax_error("malformed vec-set!");
                     };
                     let vec = self.parse_expr(vec);
                     let idx = self.parse_expr(size);
                     let elem = self.parse_expr(elem);
                     Expr::VecSet(Box::new(vec), Box::new(idx), Box::new(elem))
+                }
+                // (vec-get idx elem)
+                [Sexp::Atom(S(keyword)), es @ ..] if keyword == "vec-get" => {
+                    let [vec, idx] = &es[..] else {
+                        return syntax_error("malformed vec-get");
+                    };
+                    let vec = self.parse_expr(vec);
+                    let idx = self.parse_expr(idx);
+                    Expr::VecGet(Box::new(vec), Box::new(idx))
                 }
                 // Block
                 [Sexp::Atom(S(keyword)), es @ ..] if keyword == "block" => {
@@ -237,7 +246,8 @@ fn is_keyword(s: &str) -> bool {
             | "input"
             | "fun"
             | "vec"
-            | "vecset!"
+            | "vec-set!"
+            | "vec-get"
             | "printstack"
     )
 }
