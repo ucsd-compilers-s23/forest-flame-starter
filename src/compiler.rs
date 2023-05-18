@@ -211,8 +211,9 @@ impl Session {
                     self.compile_expr(&currcx, Loc::Mem(mem), rhs);
                     currcx = nextcx.add_binding(*var, mem);
                 }
-                self.compile_expr(&currcx, dst, body);
-                self.memset(cx.si + 1, bindings.len() as u32, Reg32::Imm(MEM_SET_VAL));
+                self.compile_expr(&currcx, Loc::Reg(Rax), body);
+                self.memset(cx.si, bindings.len() as u32, Reg32::Imm(MEM_SET_VAL));
+                self.move_to(dst, Arg64::Reg(Rax))
             }
             Expr::UnOp(op, e) => self.compile_un_op(cx, dst, *op, e),
             Expr::BinOp(op, e1, e2) => self.compile_bin_op(cx, dst, *op, e1, e2),
@@ -307,7 +308,7 @@ impl Session {
                 self.compile_expr(cx, Loc::Mem(size_mem), size);
                 self.compile_expr(&nextcx, Loc::Reg(Rsi), elem);
                 self.append_instr(Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Mem(size_mem))));
-                self.memset(cx.si + 1, 1, Reg32::Imm(MEM_SET_VAL));
+                self.memset(cx.si, 1, Reg32::Imm(MEM_SET_VAL));
                 self.append_instrs([
                     Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(STACK_BASE_REG))),
                     Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rsp))),
@@ -327,7 +328,7 @@ impl Session {
                     Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Mem(vec_mem))),
                     Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Mem(idx_mem))),
                 ]);
-                self.memset(cx.si + 1, 2, Reg32::Imm(MEM_SET_VAL));
+                self.memset(cx.si, 2, Reg32::Imm(MEM_SET_VAL));
                 self.check_is_vec(Rdx);
                 self.check_is_num(Rsi);
                 self.append_instrs([
@@ -445,7 +446,7 @@ impl Session {
         self.compile_expr(cx, Loc::Mem(mem), e1);
         self.compile_expr(&nextcx, Loc::Reg(Rcx), e2);
         self.append_instr(Instr::Mov(MovArgs::ToReg(Rax, Arg64::Mem(mem))));
-        self.memset(cx.si + 1, 1, Reg32::Imm(MEM_SET_VAL));
+        self.memset(cx.si, 1, Reg32::Imm(MEM_SET_VAL));
 
         match op {
             Op2::Plus
