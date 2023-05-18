@@ -290,7 +290,7 @@ impl Session {
             }
             Expr::MakeVec(size, elem) => {
                 let tag = self.next_tag();
-                let vec_alloc_finish_lbl = format!("vec_alloc_finish_{tag}");
+                let alloc_finish_lbl = format!("make_vec_alloc_finish_{tag}");
 
                 let (nextcx, size_mem) = cx.next_local();
                 let (_, elem_mem) = nextcx.next_local();
@@ -305,14 +305,14 @@ impl Session {
                     Instr::Jl(INVALID_SIZE_LBL.to_string()),
                     Instr::Lea(Rax, mref![HEAP_PTR_REG + 8 * Rdi + 16]),
                     Instr::Cmp(BinArgs::ToReg(Rax, Arg32::Reg(HEAP_END_REG))),
-                    Instr::Jg(vec_alloc_finish_lbl.clone()),
+                    Instr::Jg(alloc_finish_lbl.clone()),
                     // The size is already in Rdi
                     Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(HEAP_PTR_REG))),
                     Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(STACK_BASE_REG))),
                     Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rsp))),
                     Instr::Call("snek_try_gc".to_string()),
                     Instr::Mov(MovArgs::ToReg(HEAP_PTR_REG, Arg64::Reg(Rax))),
-                    Instr::Label(vec_alloc_finish_lbl),
+                    Instr::Label(alloc_finish_lbl),
                     Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Mem(size_mem))),
                     Instr::Sar(BinArgs::ToReg(Rcx, Arg32::Imm(1))),
                     Instr::Mov(MovArgs::ToMem(mref!(HEAP_PTR_REG + 8), Reg32::Reg(Rcx))),
@@ -324,6 +324,47 @@ impl Session {
                     Instr::Lea(HEAP_PTR_REG, mref!(Rdi + 8 * Rdi + 16)),
                 ]);
                 self.memset(cx.si, 2, Reg32::Imm(MEM_SET_VAL));
+                self.move_to(dst, Arg64::Reg(Rax));
+            }
+            Expr::Vec(elems) => {
+                let tag = self.next_tag();
+                let vec_alloc_finish_lbl = format!("vec_alloc_finish_{tag}");
+
+                let size: i32 = elems.len().try_into().unwrap();
+                let mut currcx = cx.clone();
+                for elem in elems {
+                    let (nextcx, mem) = currcx.next_local();
+                    self.compile_expr(&currcx, Loc::Mem(mem), elem);
+                    currcx = nextcx;
+                }
+                self.emit_instrs([
+                    Instr::Lea(Rax, mref![HEAP_PTR_REG + %(8 * (size + 2))]),
+                    Instr::Cmp(BinArgs::ToReg(Rax, Arg32::Reg(HEAP_END_REG))),
+                    Instr::Jg(vec_alloc_finish_lbl.clone()),
+                    // The size is already in Rdi
+                    Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(HEAP_PTR_REG))),
+                    Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(STACK_BASE_REG))),
+                    Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rsp))),
+                    Instr::Call("snek_try_gc".to_string()),
+                    Instr::Mov(MovArgs::ToReg(HEAP_PTR_REG, Arg64::Reg(Rax))),
+                    Instr::Label(vec_alloc_finish_lbl),
+                    Instr::Mov(MovArgs::ToMem(mref!(HEAP_PTR_REG + 8), Reg32::Imm(size))),
+                ]);
+
+                for i in 0..elems.len() {
+                    let si = cx.si as usize;
+                    self.move_to(
+                        Loc::Mem(mref!(HEAP_PTR_REG + %(8 * (i + 2)))),
+                        Arg64::Mem(mref!(Rbp - %(8 * (si + i + 1)))),
+                    )
+                }
+
+                self.emit_instrs([
+                    Instr::Mov(MovArgs::ToReg(Rax, Arg64::Reg(HEAP_PTR_REG))),
+                    Instr::Xor(BinArgs::ToReg(Rax, Arg32::Imm(1))),
+                    Instr::Lea(HEAP_PTR_REG, mref!(Rdi + 8 * Rdi + 16)),
+                ]);
+                self.memset(cx.si, elems.len() as u32, Reg32::Imm(MEM_SET_VAL));
                 self.move_to(dst, Arg64::Reg(Rax));
             }
             Expr::VecSet(vec, idx, elem) => {
@@ -586,6 +627,9 @@ fn depth(e: &Expr) -> u32 {
         Expr::Input | Expr::Var(_) | Expr::Number(_) | Expr::Boolean(_) => 0,
         Expr::UnOp(_, e) | Expr::Loop(e) | Expr::Break(e) | Expr::Set(_, e) => depth(e),
         Expr::MakeVec(size, elem) => u32::max(depth(size), depth(elem) + 1) + 1,
+        Expr::Vec(elems) => {
+            elems.iter().map(|e| depth(e)).max().unwrap_or_default() + elems.len() as u32
+        }
         Expr::VecSet(vec, idx, val) => depth(vec).max(depth(idx) + 1).max(depth(val) + 2),
         Expr::VecGet(vec, idx) => depth(vec).max(depth(idx) + 1),
         Expr::PrintStack => 0,

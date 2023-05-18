@@ -52,7 +52,7 @@ pub unsafe extern "C" fn snek_print(val: SnekVal) -> SnekVal {
 
 #[export_name = "\x01snek_try_gc"]
 unsafe fn snek_try_gc(
-    count: isize,
+    vec_size: isize,
     heap_ptr: *mut u64,
     stack_start: *const u64,
     stack_end: *const u64,

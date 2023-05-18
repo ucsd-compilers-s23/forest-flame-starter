@@ -29,6 +29,7 @@ pub enum Expr {
     Break(Box<Expr>),
     Set(Symbol, Box<Expr>),
     MakeVec(Box<Expr>, Box<Expr>),
+    Vec(Vec<Expr>),
     VecSet(Box<Expr>, Box<Expr>, Box<Expr>),
     VecGet(Box<Expr>, Box<Expr>),
     Block(Vec<Expr>),
