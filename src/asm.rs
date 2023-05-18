@@ -1,4 +1,7 @@
 #![allow(unused)]
+
+use std::fmt::format;
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Reg {
     Rax,
@@ -175,7 +178,7 @@ pub fn imm32_to_string(i: i32) -> String {
 
 pub fn mem_ref_to_string(m: MemRef) -> String {
     format!(
-        "QWORD [{} + {}]",
+        "QWORD [{} {}]",
         reg_to_string(m.reg),
         offset_to_string(m.offset)
     )
@@ -183,12 +186,32 @@ pub fn mem_ref_to_string(m: MemRef) -> String {
 
 fn offset_to_string(off: Offset) -> String {
     match off {
-        Offset::Constant(n) => format!("{}", n),
+        Offset::Constant(n) => {
+            if n < 0 {
+                format!("- {}", n.unsigned_abs())
+            } else {
+                format!("+ {}", n)
+            }
+        }
         Offset::Computed {
             reg,
             factor,
             constant,
-        } => format!("{} * {} + {}", reg_to_string(reg), factor, constant),
+        } => {
+            let mut s = String::new();
+            if factor < 0 {
+                s += &format!("- {}", factor.unsigned_abs());
+            } else {
+                s += &format!("+ {}", factor);
+            }
+            s += &format!("*{}", reg_to_string(reg));
+            if constant < 0 {
+                s += &format!(" - {}", constant.unsigned_abs());
+            } else {
+                s += &format!(" + {}", constant);
+            }
+            s
+        }
     }
 }
 
