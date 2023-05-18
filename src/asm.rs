@@ -38,6 +38,37 @@ pub enum Offset {
     },
 }
 
+#[macro_export]
+macro_rules! mref {
+    ($reg:ident + $factor:literal * $idx:ident + $constant:literal) => {{
+        MemRef {
+            reg: $reg,
+            offset: Offset::Computed {
+                reg: $idx,
+                factor: $factor,
+                constant: $constant,
+            },
+        }
+    }};
+    ($reg:ident + %($offset:expr)) => {{
+        let offset: i32 = $offset.try_into().unwrap();
+        MemRef {
+            reg: $reg,
+            offset: Offset::Constant(offset),
+        }
+    }};
+    ($reg:ident - %($offset:expr)) => {{
+        let offset: i32 = $offset.try_into().unwrap();
+        MemRef {
+            reg: $reg,
+            offset: Offset::Constant(-offset),
+        }
+    }};
+    ($reg:ident + $offset:literal) => {
+        $crate::mref!($reg + %($offset))
+    };
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Arg64 {
     Reg(Reg),
@@ -153,6 +184,25 @@ pub fn reg_to_string(r: Reg) -> String {
     }
 }
 
+impl PartialEq<Loc> for Arg64 {
+    fn eq(&self, other: &Loc) -> bool {
+        match (self, other) {
+            (Arg64::Reg(r1), Loc::Reg(r2)) => r1 == r2,
+            (Arg64::Mem(m1), Loc::Mem(m2)) => m1 == m2,
+            (Arg64::Imm(_), Loc::Reg(_))
+            | (Arg64::Imm(_), Loc::Mem(_))
+            | (Arg64::Mem(_), Loc::Reg(_))
+            | (Arg64::Reg(_), Loc::Mem(_)) => false,
+        }
+    }
+}
+
+impl PartialEq<Arg64> for Loc {
+    fn eq(&self, other: &Arg64) -> bool {
+        PartialEq::eq(other, self)
+    }
+}
+
 impl From<Loc> for Arg32 {
     fn from(loc: Loc) -> Self {
         match loc {
@@ -204,7 +254,7 @@ fn offset_to_string(off: Offset) -> String {
             } else {
                 s += &format!("+ {}", factor);
             }
-            s += &format!("*{}", reg_to_string(reg));
+            s += &format!(" * {}", reg_to_string(reg));
             if constant < 0 {
                 s += &format!(" - {}", constant.unsigned_abs());
             } else {
