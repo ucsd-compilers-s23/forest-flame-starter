@@ -77,15 +77,15 @@ pub unsafe extern "C" fn snek_print(val: SnekVal) -> SnekVal {
     val
 }
 
-unsafe fn try_gc(count: usize, stack_start: *const u64, stack_end: *const u64) -> *const u64 {
+unsafe fn try_gc(count: isize, stack_start: *const u64, stack_end: *const u64) -> *const u64 {
     eprintln!("out of memory");
     std::process::exit(ErrCode::OutOfMemory as i32)
 }
 
-unsafe fn alloc(count: usize, stack_start: *const u64, stack_end: *const u64) -> *mut u64 {
+unsafe fn alloc(count: isize, stack_start: *const u64, stack_end: *const u64) -> *mut u64 {
     // Allocate 1 extra word to store GC metadata
     HEAP_PTR = if HEAP_PTR.offset_from(HEAP_START) >= count as isize + 1 {
-        HEAP_PTR.sub(count + 1)
+        HEAP_PTR.offset(-(count + 1))
     } else {
         try_gc(count, stack_start, stack_end)
     };
@@ -108,11 +108,11 @@ pub unsafe extern "C" fn snek_alloc_vec(
     if size & 1 != 0 {
         snek_error(ErrCode::InvalidArgument);
     }
+    let size = (size >> 1) as isize;
     // Check the size is non-negative
     if size < 0 {
         snek_error(ErrCode::InvalidVecSize);
     }
-    let size = (size >> 1) as usize;
 
     // Allocate `size + 1` 8 byte words to account for size of the vector
     let ptr = alloc(size + 1, stack_start, stack_end) as *mut u64;
@@ -120,7 +120,7 @@ pub unsafe extern "C" fn snek_alloc_vec(
     // Write size of the vector and fill it with the given element
     ptr.add(1).write(size as u64);
     for i in 0..size {
-        ptr.add(2 + i).write(elem);
+        ptr.offset(2 + i).write(elem);
     }
     (ptr as u64) ^ 1
 }
