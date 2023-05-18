@@ -51,13 +51,13 @@ impl Parser {
             },
             Sexp::List(vec) => match &vec[..] {
                 // (vec size elem)
-                [Sexp::Atom(S(keyword)), es @ ..] if keyword == "vec" => {
+                [Sexp::Atom(S(keyword)), es @ ..] if keyword == "make-vec" => {
                     let [size, elem] = &es[..] else {
                         return syntax_error("malformed vec");
                     };
                     let size = self.parse_expr(size);
                     let elem = self.parse_expr(elem);
-                    Expr::VecNew(Box::new(size), Box::new(elem))
+                    Expr::MakeVec(Box::new(size), Box::new(elem))
                 }
                 // (vec-set! idx elem)
                 [Sexp::Atom(S(keyword)), es @ ..] if keyword == "vec-set!" => {
@@ -245,7 +245,7 @@ fn is_keyword(s: &str) -> bool {
             | "set!"
             | "input"
             | "fun"
-            | "vec"
+            | "make-vec"
             | "vec-set!"
             | "vec-get"
             | "printstack"

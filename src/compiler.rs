@@ -5,6 +5,7 @@ use crate::{
         instrs_to_string, Arg32, Arg64, BinArgs, CMov, Instr, Loc, MemRef, MovArgs, Offset,
         Reg::{self, *},
         Reg32,
+        StrOp::Stosq,
     },
     mref,
     syntax::{Expr, FunDecl, Op1, Op2, Prog, Symbol},
@@ -19,9 +20,12 @@ struct Session {
 const INVALID_ARG_LBL: &str = "invalid_argument";
 const OVERFLOW_LBL: &str = "overflow";
 const INDEX_OUT_OF_BOUNDS: &str = "index_out_of_bounds";
+const INVALID_SIZE_LBL: &str = "invalid_vec_size";
 
 const STACK_BASE_REG: Reg = Rbx;
-const INPUT_REG: Reg = R12;
+const INPUT_REG: Reg = R13;
+const HEAP_END_REG: Reg = R14;
+const HEAP_PTR_REG: Reg = R15;
 
 const MEM_SET_VAL: i32 = 0b001;
 
@@ -94,14 +98,16 @@ pub fn compile(prg: &Prog) -> String {
     match fun_arity_map(prg) {
         Ok(funs) => {
             let mut sess = Session::new(funs);
-            let locals = prg.main.depth();
+            let locals = depth(&prg.main);
             sess.compile_funs(&prg.funs);
             sess.emit_instr(Instr::Label("our_code_starts_here".to_string()));
-            let callee_saved_regs = [Rbp, STACK_BASE_REG, INPUT_REG];
+            let callee_saved_regs = [Rbp, STACK_BASE_REG, INPUT_REG, HEAP_END_REG, HEAP_PTR_REG];
             sess.fun_entry(locals, &callee_saved_regs);
             sess.emit_instrs([
                 Instr::Mov(MovArgs::ToReg(STACK_BASE_REG, Arg64::Reg(Rbp))),
                 Instr::Mov(MovArgs::ToReg(INPUT_REG, Arg64::Reg(Rdi))),
+                Instr::Mov(MovArgs::ToReg(HEAP_PTR_REG, Arg64::Reg(Rsi))),
+                Instr::Mov(MovArgs::ToReg(HEAP_END_REG, Arg64::Reg(Rcx))),
             ]);
             sess.compile_expr(&Ctxt::new(), Loc::Reg(Rax), &prg.main);
             sess.fun_exit(locals, &callee_saved_regs);
@@ -113,6 +119,7 @@ extern snek_error
 extern snek_print
 extern snek_alloc_vec
 extern snek_print_stack
+extern snek_try_gc
 global our_code_starts_here
 {}
 {INVALID_ARG_LBL}:
@@ -123,6 +130,9 @@ global our_code_starts_here
   call snek_error
 {INDEX_OUT_OF_BOUNDS}:
   mov edi, 3
+  call snek_error
+{INVALID_SIZE_LBL}:
+  mov edi, 4
   call snek_error
 ",
                 instrs_to_string(&sess.instrs)
@@ -173,7 +183,7 @@ impl Session {
 
     fn compile_fun(&mut self, fun: &FunDecl) {
         check_dup_bindings(&fun.params);
-        let locals = fun.body.depth();
+        let locals = depth(&fun.body);
         self.emit_instr(Instr::Label(format!("snek_fun_{}", fun.name)));
         self.fun_entry(locals, &[Rbp]);
         self.compile_expr(&Ctxt::fun(&fun.params), Loc::Reg(Rax), &fun.body);
@@ -278,17 +288,42 @@ impl Session {
                     self.move_to(dst, Arg32::Reg(INPUT_REG))
                 }
             }
-            Expr::VecNew(size, elem) => {
+            Expr::MakeVec(size, elem) => {
+                let tag = self.next_tag();
+                let vec_alloc_finish_lbl = format!("vec_alloc_finish_{tag}");
+
                 let (nextcx, size_mem) = cx.next_local();
+                let (_, elem_mem) = nextcx.next_local();
+
                 self.compile_expr(cx, Loc::Mem(size_mem), size);
-                self.compile_expr(&nextcx, Loc::Reg(Rsi), elem);
+                self.compile_expr(&nextcx, Loc::Mem(elem_mem), elem);
                 self.emit_instr(Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Mem(size_mem))));
-                self.memset(cx.si, 1, Reg32::Imm(MEM_SET_VAL));
+                self.check_is_num(Rdi);
                 self.emit_instrs([
+                    Instr::Sar(BinArgs::ToReg(Rdi, Arg32::Imm(1))),
+                    Instr::Cmp(BinArgs::ToReg(Rdi, Arg32::Imm(0))),
+                    Instr::Jl(INVALID_SIZE_LBL.to_string()),
+                    Instr::Lea(Rax, mref![HEAP_PTR_REG + 8 * Rdi + 16]),
+                    Instr::Cmp(BinArgs::ToReg(Rax, Arg32::Reg(HEAP_END_REG))),
+                    Instr::Jg(vec_alloc_finish_lbl.clone()),
+                    // The size is already in Rdi
+                    Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(HEAP_PTR_REG))),
                     Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(STACK_BASE_REG))),
                     Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rsp))),
-                    Instr::Call("snek_alloc_vec".to_string()),
+                    Instr::Call("snek_try_gc".to_string()),
+                    Instr::Mov(MovArgs::ToReg(HEAP_PTR_REG, Arg64::Reg(Rax))),
+                    Instr::Label(vec_alloc_finish_lbl),
+                    Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Mem(size_mem))),
+                    Instr::Sar(BinArgs::ToReg(Rcx, Arg32::Imm(1))),
+                    Instr::Mov(MovArgs::ToMem(mref!(HEAP_PTR_REG + 8), Reg32::Reg(Rcx))),
+                    Instr::Lea(Rdi, mref!(HEAP_PTR_REG + 16)),
+                    Instr::Mov(MovArgs::ToReg(Rax, Arg64::Mem(elem_mem))),
+                    Instr::Rep(Stosq),
+                    Instr::Mov(MovArgs::ToReg(Rax, Arg64::Reg(HEAP_PTR_REG))),
+                    Instr::Xor(BinArgs::ToReg(Rax, Arg32::Imm(1))),
+                    Instr::Lea(HEAP_PTR_REG, mref!(Rdi + 8 * Rdi + 16)),
                 ]);
+                self.memset(cx.si, 2, Reg32::Imm(MEM_SET_VAL));
                 self.move_to(dst, Arg64::Reg(Rax));
             }
             Expr::VecSet(vec, idx, elem) => {
@@ -532,6 +567,28 @@ fn stack_size(locals: u32, calle_saved: &[Reg]) -> u32 {
         locals
     } else {
         locals + 1
+    }
+}
+
+fn depth(e: &Expr) -> u32 {
+    match e {
+        Expr::BinOp(_, e1, e2) => u32::max(depth(e1), depth(e2) + 1),
+        Expr::Let(bindings, e) => {
+            let max = bindings
+                .iter()
+                .map(|(_, e)| depth(e))
+                .max()
+                .unwrap_or_default();
+            u32::max(max, depth(e) + bindings.len() as u32)
+        }
+        Expr::If(e1, e2, e3) => depth(e1).max(depth(e2)).max(depth(e3)),
+        Expr::Call(_, es) | Expr::Block(es) => es.iter().map(depth).max().unwrap_or(0),
+        Expr::Input | Expr::Var(_) | Expr::Number(_) | Expr::Boolean(_) => 0,
+        Expr::UnOp(_, e) | Expr::Loop(e) | Expr::Break(e) | Expr::Set(_, e) => depth(e),
+        Expr::MakeVec(size, elem) => u32::max(depth(size), depth(elem) + 1) + 1,
+        Expr::VecSet(vec, idx, val) => depth(vec).max(depth(idx) + 1).max(depth(val) + 2),
+        Expr::VecGet(vec, idx) => depth(vec).max(depth(idx) + 1),
+        Expr::PrintStack => 0,
     }
 }
 

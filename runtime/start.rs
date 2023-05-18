@@ -25,7 +25,7 @@ extern "C" {
     // it does not add an underscore in front of the name.
     // Courtesy of Max New (https://maxsnew.com/teaching/eecs-483-fa22/hw_adder_assignment.html)
     #[link_name = "\x01our_code_starts_here"]
-    fn our_code_starts_here(input: u64) -> u64;
+    fn our_code_starts_here(input: u64, heap_start: *const u64, heap_end: *const u64) -> u64;
 }
 
 #[export_name = "\x01snek_error"]
@@ -42,6 +42,35 @@ pub extern "C" fn snek_error(errcode: ErrCode) {
         eprintln!("an error ocurred {}", errcode as i32);
     }
     std::process::exit(errcode as i32);
+}
+
+#[export_name = "\x01snek_print"]
+pub unsafe extern "C" fn snek_print(val: SnekVal) -> SnekVal {
+    println!("{}", snek_str(val, &mut HashSet::new()));
+    val
+}
+
+#[export_name = "\x01snek_try_gc"]
+unsafe fn snek_try_gc(
+    count: isize,
+    heap_ptr: *mut u64,
+    stack_start: *const u64,
+    stack_end: *const u64,
+) -> *mut u64 {
+    eprintln!("out of memory");
+    std::process::exit(ErrCode::OutOfMemory as i32)
+}
+
+#[export_name = "\x01snek_print_stack"]
+unsafe fn snek_print_stack(stack_start: *const u64, stack_end: *const u64) {
+    let mut ptr = stack_start;
+    println!("-----------------------------------------");
+    while ptr >= stack_end {
+        let val = *ptr;
+        println!("{ptr:?}: {:#0x}", val);
+        ptr = ptr.sub(1);
+    }
+    println!("-----------------------------------------");
 }
 
 unsafe fn snek_str(val: SnekVal, seen: &mut HashSet<SnekVal>) -> String {
@@ -71,72 +100,6 @@ unsafe fn snek_str(val: SnekVal, seen: &mut HashSet<SnekVal>) -> String {
     }
 }
 
-#[export_name = "\x01snek_print"]
-pub unsafe extern "C" fn snek_print(val: SnekVal) -> SnekVal {
-    println!("{}", snek_str(val, &mut HashSet::new()));
-    val
-}
-
-unsafe fn try_gc(count: isize, stack_start: *const u64, stack_end: *const u64) -> *const u64 {
-    eprintln!("out of memory");
-    std::process::exit(ErrCode::OutOfMemory as i32)
-}
-
-unsafe fn alloc(count: isize, stack_start: *const u64, stack_end: *const u64) -> *mut u64 {
-    // Allocate 1 extra word to store GC metadata
-    HEAP_PTR = if HEAP_PTR.offset_from(HEAP_START) >= count as isize + 1 {
-        HEAP_PTR.offset(-(count + 1))
-    } else {
-        try_gc(count, stack_start, stack_end)
-    };
-    let ptr = HEAP_PTR as *mut u64;
-
-    // Write GC metadata
-    ptr.write(0);
-
-    ptr
-}
-
-#[export_name = "\x01snek_alloc_vec"]
-pub unsafe extern "C" fn snek_alloc_vec(
-    size: SnekVal,
-    elem: SnekVal,
-    stack_start: *const u64,
-    stack_end: *const u64,
-) -> SnekVal {
-    // Check the size is a number
-    if size & 1 != 0 {
-        snek_error(ErrCode::InvalidArgument);
-    }
-    let size = (size >> 1) as isize;
-    // Check the size is non-negative
-    if size < 0 {
-        snek_error(ErrCode::InvalidVecSize);
-    }
-
-    // Allocate `size + 1` 8 byte words to account for size of the vector
-    let ptr = alloc(size + 1, stack_start, stack_end) as *mut u64;
-
-    // Write size of the vector and fill it with the given element
-    ptr.add(1).write(size as u64);
-    for i in 0..size {
-        ptr.offset(2 + i).write(elem);
-    }
-    (ptr as u64) ^ 1
-}
-
-#[export_name = "\x01snek_print_stack"]
-unsafe fn snek_print_stack(stack_start: *const u64, stack_end: *const u64) {
-    let mut ptr = stack_start;
-    println!("-----------------------------------------");
-    while ptr >= stack_end {
-        let val = *ptr;
-        println!("{ptr:?}: {:#0x}", val);
-        ptr = ptr.sub(1);
-    }
-    println!("-----------------------------------------");
-}
-
 fn parse_input(input: &str) -> u64 {
     match input {
         "true" => TRUE,
@@ -164,6 +127,6 @@ fn main() {
         HEAP_PTR = HEAP_END;
     }
 
-    let i: u64 = unsafe { our_code_starts_here(input) };
+    let i: u64 = unsafe { our_code_starts_here(input, HEAP_START, HEAP_END) };
     unsafe { snek_print(i) };
 }

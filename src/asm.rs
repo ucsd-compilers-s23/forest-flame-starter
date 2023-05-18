@@ -159,8 +159,14 @@ pub enum Instr {
     Jno(String), // jump if last arith operation didn't overflow
 
     Lea(Reg, MemRef),
+    Rep(StrOp),
 
     Comment(String),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StrOp {
+    Stosq,
 }
 
 pub fn reg_to_string(r: Reg) -> String {
@@ -248,19 +254,7 @@ fn offset_to_string(off: Offset) -> String {
             factor,
             constant,
         } => {
-            let mut s = String::new();
-            if factor < 0 {
-                s += &format!("- {}", factor.unsigned_abs());
-            } else {
-                s += &format!("+ {}", factor);
-            }
-            s += &format!(" * {}", reg_to_string(reg));
-            if constant < 0 {
-                s += &format!(" - {}", constant.unsigned_abs());
-            } else {
-                s += &format!(" + {}", constant);
-            }
-            s
+            format!("+ {factor} * {} + {constant}", reg_to_string(reg))
         }
     }
 }
@@ -376,6 +370,13 @@ pub fn instr_to_string(i: &Instr) -> String {
         Instr::Lea(reg, mem) => {
             format!("  lea {}, {}", reg_to_string(*reg), mem_ref_to_string(*mem))
         }
+        Instr::Rep(op) => format!("  rep {}", str_op_to_string(*op)),
+    }
+}
+
+fn str_op_to_string(op: StrOp) -> String {
+    match op {
+        StrOp::Stosq => format!("stosq"),
     }
 }
 

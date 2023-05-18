@@ -28,7 +28,7 @@ pub enum Expr {
     Loop(Box<Expr>),
     Break(Box<Expr>),
     Set(Symbol, Box<Expr>),
-    VecNew(Box<Expr>, Box<Expr>),
+    MakeVec(Box<Expr>, Box<Expr>),
     VecSet(Box<Expr>, Box<Expr>, Box<Expr>),
     VecGet(Box<Expr>, Box<Expr>),
     Block(Vec<Expr>),
@@ -61,30 +61,6 @@ pub enum Op2 {
 impl Symbol {
     pub fn new(s: impl ToString) -> Symbol {
         Symbol(Box::leak(s.to_string().into_boxed_str()))
-    }
-}
-
-impl Expr {
-    pub fn depth(&self) -> u32 {
-        match self {
-            Expr::BinOp(_, e1, e2) => u32::max(e1.depth(), e2.depth() + 1),
-            Expr::Let(bindings, e) => {
-                let max = bindings
-                    .iter()
-                    .map(|(_, e)| e.depth())
-                    .max()
-                    .unwrap_or_default();
-                u32::max(max, e.depth() + bindings.len() as u32)
-            }
-            Expr::If(e1, e2, e3) => e1.depth().max(e2.depth()).max(e3.depth()),
-            Expr::Call(_, es) | Expr::Block(es) => es.iter().map(Expr::depth).max().unwrap_or(0),
-            Expr::Input | Expr::Var(_) | Expr::Number(_) | Expr::Boolean(_) => 0,
-            Expr::UnOp(_, e) | Expr::Loop(e) | Expr::Break(e) | Expr::Set(_, e) => e.depth(),
-            Expr::VecNew(size, elem) => u32::max(size.depth(), elem.depth() + 1),
-            Expr::VecSet(vec, idx, val) => vec.depth().max(idx.depth() + 1).max(val.depth() + 2),
-            Expr::VecGet(vec, idx) => vec.depth().max(idx.depth() + 1),
-            Expr::PrintStack => 0,
-        }
     }
 }
 
