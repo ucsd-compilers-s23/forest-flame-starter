@@ -134,6 +134,7 @@ pub enum Instr {
     Sal(BinArgs),
     Shl(BinArgs),
     Cmp(BinArgs),
+    Not(Loc),
     Test(BinArgs),
 
     Push(Arg32),
@@ -321,6 +322,7 @@ pub fn instr_to_string(i: &Instr) -> String {
         Instr::IMul(args) => format!("  imul {}", bin_args_to_string(*args)),
         Instr::And(args) => format!("  and {}", bin_args_to_string(*args)),
         Instr::Or(args) => format!("  or {}", bin_args_to_string(*args)),
+        Instr::Not(loc) => format!("  not {}", loc_to_string(*loc)),
         Instr::Xor(args) => format!("  xor {}", bin_args_to_string(*args)),
         Instr::Shr(args) => format!("  shr {}", bin_args_to_string(*args)),
         Instr::Shl(args) => format!("  shl {}", bin_args_to_string(*args)),

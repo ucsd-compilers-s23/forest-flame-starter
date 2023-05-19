@@ -506,11 +506,25 @@ impl Session {
                 self.check_is_num(Rcx);
             }
             Op2::Equal => {
+                let tag = self.next_tag();
+                let lbl = format!("check_eq_finish_{tag}");
                 self.emit_instrs([
-                    Instr::Cmp(BinArgs::ToReg(Rdx, Arg32::Reg(Rax))),
-                    Instr::Xor(BinArgs::ToReg(Rdx, Arg32::Reg(Rcx))),
+                    // %rdx = %rax | %rcx
+                    Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(Rax))),
+                    Instr::Or(BinArgs::ToReg(Rdx, Arg32::Reg(Rcx))),
+                    // if (%rdx & 1 == 0) then they are both numbers and we are good
                     Instr::Test(BinArgs::ToReg(Rdx, Arg32::Imm(1))),
+                    Instr::Jz(lbl.to_string()),
+                    // %rdx = %rax ^ %rcx
+                    Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(Rax))),
+                    Instr::Xor(BinArgs::ToReg(Rdx, Arg32::Reg(Rcx))),
+                    // if first bits are different then bad
+                    Instr::Test(BinArgs::ToReg(Rdx, Arg32::Imm(0b01))),
                     Instr::Jnz(INVALID_ARG_LBL.to_string()),
+                    // if second bits are different then bad
+                    Instr::Test(BinArgs::ToReg(Rdx, Arg32::Imm(0b10))),
+                    Instr::Jnz(INVALID_ARG_LBL.to_string()),
+                    Instr::Label(lbl.to_string()),
                 ]);
             }
         }
