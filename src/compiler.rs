@@ -313,15 +313,21 @@ impl Session {
                     Instr::Call("snek_try_gc".to_string()),
                     Instr::Mov(MovArgs::ToReg(HEAP_PTR_REG, Arg64::Reg(Rax))),
                     Instr::Label(alloc_finish_lbl),
-                    Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Mem(size_mem))),
-                    Instr::Sar(BinArgs::ToReg(Rcx, Arg32::Imm(1))),
-                    Instr::Mov(MovArgs::ToMem(mref!(HEAP_PTR_REG + 8), Reg32::Reg(Rcx))),
+                    // Load size in %rcx
+                    Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Mem(size_mem))),
+                    Instr::Sar(BinArgs::ToReg(Rsi, Arg32::Imm(1))),
+                    // Write size in heap ptr + 8
+                    Instr::Mov(MovArgs::ToMem(mref!(HEAP_PTR_REG + 8), Reg32::Reg(Rsi))),
+                    // Fill vector by using `rep stosq` (%rdi = ptr, %rcx = count, %rax = val)
                     Instr::Lea(Rdi, mref!(HEAP_PTR_REG + 16)),
+                    Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rsi))),
                     Instr::Mov(MovArgs::ToReg(Rax, Arg64::Mem(elem_mem))),
                     Instr::Rep(Stosq),
+                    // Set current heap ptr as the value for the allocated vector
                     Instr::Mov(MovArgs::ToReg(Rax, Arg64::Reg(HEAP_PTR_REG))),
                     Instr::Xor(BinArgs::ToReg(Rax, Arg32::Imm(1))),
-                    Instr::Lea(HEAP_PTR_REG, mref!(HEAP_PTR_REG + 8 * Rcx + 16)),
+                    // Move heap ptr
+                    Instr::Lea(HEAP_PTR_REG, mref!(HEAP_PTR_REG + 8 * Rsi + 16)),
                 ]);
                 self.memset(cx.si, 2, Reg32::Imm(MEM_SET_VAL));
                 self.move_to(dst, Arg64::Reg(Rax));
