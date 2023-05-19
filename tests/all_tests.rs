@@ -2,6 +2,12 @@ mod infra;
 
 // Your tests go here!
 success_tests! {
+    // Vectors
+    {
+        name: forest_flame_kmp,
+        file: "forest_flame_kmp.snek",
+        expected: "3"
+    },
     // Number and Boolean Literals
     {
         name: adder_num,
