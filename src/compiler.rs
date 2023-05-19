@@ -321,7 +321,7 @@ impl Session {
                     Instr::Rep(Stosq),
                     Instr::Mov(MovArgs::ToReg(Rax, Arg64::Reg(HEAP_PTR_REG))),
                     Instr::Xor(BinArgs::ToReg(Rax, Arg32::Imm(1))),
-                    Instr::Lea(HEAP_PTR_REG, mref!(Rdi + 8 * Rdi + 16)),
+                    Instr::Lea(HEAP_PTR_REG, mref!(HEAP_PTR_REG + 8 * Rcx + 16)),
                 ]);
                 self.memset(cx.si, 2, Reg32::Imm(MEM_SET_VAL));
                 self.move_to(dst, Arg64::Reg(Rax));
@@ -362,7 +362,7 @@ impl Session {
                 self.emit_instrs([
                     Instr::Mov(MovArgs::ToReg(Rax, Arg64::Reg(HEAP_PTR_REG))),
                     Instr::Xor(BinArgs::ToReg(Rax, Arg32::Imm(1))),
-                    Instr::Lea(HEAP_PTR_REG, mref!(Rdi + 8 * Rdi + 16)),
+                    Instr::Lea(HEAP_PTR_REG, mref!(HEAP_PTR_REG + %(8 * (size + 2)))),
                 ]);
                 self.memset(cx.si, elems.len() as u32, Reg32::Imm(MEM_SET_VAL));
                 self.move_to(dst, Arg64::Reg(Rax));
