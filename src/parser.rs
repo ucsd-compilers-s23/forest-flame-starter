@@ -82,6 +82,14 @@ impl Parser {
                     let idx = self.parse_expr(idx);
                     Expr::VecGet(Box::new(vec), Box::new(idx))
                 }
+                // (vec-len vec)
+                [Sexp::Atom(S(keyword)), es @ ..] if keyword == "vec-len" => {
+                    let [vec] = &es[..] else {
+                        return syntax_error("malformed vec-len");
+                    };
+                    let vec = self.parse_expr(vec);
+                    Expr::VecLen(Box::new(vec))
+                }
                 // Block
                 [Sexp::Atom(S(keyword)), es @ ..] if keyword == "block" => {
                     let es: Vec<_> = es.iter().map(|e| self.parse_expr(e)).collect();
@@ -253,6 +261,7 @@ fn is_keyword(s: &str) -> bool {
             | "vec"
             | "vec-set!"
             | "vec-get"
+            | "vec-len"
             | "printstack"
     )
 }

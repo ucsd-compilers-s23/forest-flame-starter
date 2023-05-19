@@ -425,6 +425,16 @@ impl Session {
                 ]);
                 self.move_to(dst, 0.repr32());
             }
+            Expr::VecLen(vec) => {
+                self.compile_expr(cx, Loc::Reg(Rax), vec);
+                self.check_is_vec(Rax);
+                self.emit_instrs([
+                    Instr::Sub(BinArgs::ToReg(Rax, Arg32::Imm(1))),
+                    Instr::Mov(MovArgs::ToReg(Rax, Arg64::Mem(mref![Rax + 8]))),
+                    Instr::Sal(BinArgs::ToReg(Rax, Arg32::Imm(1))),
+                ]);
+                self.move_to(dst, Arg64::Reg(Rax));
+            }
         }
     }
 
@@ -624,7 +634,6 @@ fn depth(e: &Expr) -> u32 {
         }
         Expr::If(e1, e2, e3) => depth(e1).max(depth(e2)).max(depth(e3)),
         Expr::Call(_, es) | Expr::Block(es) => es.iter().map(depth).max().unwrap_or(0),
-        Expr::Input | Expr::Var(_) | Expr::Number(_) | Expr::Boolean(_) => 0,
         Expr::UnOp(_, e) | Expr::Loop(e) | Expr::Break(e) | Expr::Set(_, e) => depth(e),
         Expr::MakeVec(size, elem) => u32::max(depth(size), depth(elem) + 1) + 1,
         Expr::Vec(elems) => {
@@ -632,7 +641,12 @@ fn depth(e: &Expr) -> u32 {
         }
         Expr::VecSet(vec, idx, val) => depth(vec).max(depth(idx) + 1).max(depth(val) + 2),
         Expr::VecGet(vec, idx) => depth(vec).max(depth(idx) + 1),
-        Expr::PrintStack => 0,
+        Expr::PrintStack
+        | Expr::VecLen(_)
+        | Expr::Input
+        | Expr::Var(_)
+        | Expr::Number(_)
+        | Expr::Boolean(_) => 0,
     }
 }
 

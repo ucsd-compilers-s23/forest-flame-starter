@@ -32,6 +32,7 @@ pub enum Expr {
     Vec(Vec<Expr>),
     VecSet(Box<Expr>, Box<Expr>, Box<Expr>),
     VecGet(Box<Expr>, Box<Expr>),
+    VecLen(Box<Expr>),
     Block(Vec<Expr>),
     Call(Symbol, Vec<Expr>),
     Input,
