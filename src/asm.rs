@@ -313,7 +313,7 @@ pub fn loc_to_string(loc: Loc) -> String {
 
 pub fn instr_to_string(i: &Instr) -> String {
     match i {
-        Instr::Comment(s) => format!(";; {}\n", s),
+        Instr::Comment(s) => format!(";; {}", s),
         Instr::Mov(args) => format!("  mov {}", mov_args_to_string(args)),
         Instr::Add(args) => format!("  add {}", bin_args_to_string(*args)),
         Instr::Sub(args) => format!("  sub {}", bin_args_to_string(*args)),

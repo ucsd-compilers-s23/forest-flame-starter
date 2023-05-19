@@ -411,7 +411,7 @@ impl Session {
                     Instr::Sar(BinArgs::ToReg(Rdi, Arg32::Imm(1))),
                     Instr::Cmp(BinArgs::ToReg(Rdi, Arg32::Imm(0))),
                     Instr::Jl(INDEX_OUT_OF_BOUNDS.to_string()),
-                    Instr::Cmp(BinArgs::ToReg(Rdi, Arg32::Reg(Rcx))),
+                    Instr::Cmp(BinArgs::ToReg(Rdi, Arg32::Reg(Rdx))),
                     Instr::Jge(INDEX_OUT_OF_BOUNDS.to_string()),
                     Instr::Mov(MovArgs::ToReg(Rax, Arg64::Mem(mref![Rax + 8 * Rdi + 16]))),
                 ]);
