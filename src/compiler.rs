@@ -184,7 +184,7 @@ impl Session {
     fn compile_fun(&mut self, fun: &FunDecl) {
         check_dup_bindings(&fun.params);
         let locals = depth(&fun.body);
-        self.emit_instr(Instr::Label(format!("snek_fun_{}", fun.name)));
+        self.emit_instr(Instr::Label(fun_label(fun.name)));
         self.fun_entry(locals, &[Rbp]);
         self.compile_expr(&Ctxt::fun(&fun.params), Loc::Reg(Rax), &fun.body);
         self.fun_exit(locals, &[Rbp]);
@@ -276,7 +276,7 @@ impl Session {
                     self.compile_expr(cx, Loc::Mem(mref![Rsp + %(8 * i)]), arg);
                 }
                 self.emit_instrs([
-                    Instr::Call(format!("snek_fun_{fun}")),
+                    Instr::Call(fun_label(*fun)),
                     Instr::Add(BinArgs::ToReg(Rsp, Arg32::Imm(8 * nargs))),
                 ]);
                 self.move_to(dst, Arg64::Reg(Rax));
@@ -498,6 +498,7 @@ impl Session {
             Op2::Plus
             | Op2::Minus
             | Op2::Times
+            | Op2::Divide
             | Op2::Greater
             | Op2::GreaterEqual
             | Op2::Less
@@ -544,6 +545,14 @@ impl Session {
                 self.emit_instrs([
                     Instr::Sar(BinArgs::ToReg(Rax, Arg32::Imm(1))),
                     Instr::IMul(BinArgs::ToReg(Rax, Arg32::Reg(Rcx))),
+                    Instr::Jo(OVERFLOW_LBL.to_string()),
+                ]);
+            }
+            Op2::Divide => {
+                self.emit_instrs([
+                    Instr::Xor(BinArgs::ToReg(Rdx, Arg32::Reg(Rdx))),
+                    Instr::IDiv(Rcx),
+                    Instr::Sal(BinArgs::ToReg(Rax, Arg32::Imm(1))),
                     Instr::Jo(OVERFLOW_LBL.to_string()),
                 ]);
             }
@@ -745,4 +754,8 @@ fn raise_undefined_fun(fun: Symbol) {
 
 fn raise_wrong_number_of_args(expected: usize, got: usize) {
     panic!("function takes {expected} arguments but {got} were supplied")
+}
+
+fn fun_label(fun: Symbol) -> String {
+    format!("snek_fun_{}", fun.replace("-", "_"))
 }

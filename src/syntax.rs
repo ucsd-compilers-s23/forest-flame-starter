@@ -53,6 +53,7 @@ pub enum Op2 {
     Plus,
     Minus,
     Times,
+    Divide,
     Equal,
     Greater,
     GreaterEqual,
@@ -63,6 +64,10 @@ pub enum Op2 {
 impl Symbol {
     pub fn new(s: impl ToString) -> Symbol {
         Symbol(Box::leak(s.to_string().into_boxed_str()))
+    }
+
+    pub fn replace(&self, from: &str, to: &str) -> String {
+        self.0.replace(from, to)
     }
 }
 

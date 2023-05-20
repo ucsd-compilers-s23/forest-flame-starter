@@ -8,6 +8,18 @@ success_tests! {
         file: "forest_flame_kmp.snek",
         expected: "3"
     },
+    {
+        name: forest_flame_bin_search0,
+        file: "forest_flame_bin_search.snek",
+        input: "3",
+        expected: "2"
+    },
+    {
+        name: forest_flame_bin_search1,
+        file: "forest_flame_bin_search.snek",
+        input: "88",
+        expected: "7"
+    },
     // Number and Boolean Literals
     {
         name: adder_num,

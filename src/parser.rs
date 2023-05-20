@@ -161,7 +161,10 @@ impl Parser {
                 }
 
                 [Sexp::Atom(S(op)), es @ ..]
-                    if matches!(op.as_str(), "+" | "-" | "*" | ">" | "<" | ">=" | "<=" | "=") =>
+                    if matches!(
+                        op.as_str(),
+                        "+" | "-" | "*" | "/" | ">" | "<" | ">=" | "<=" | "="
+                    ) =>
                 {
                     let [e1, e2] = es else {
                         return syntax_error("expected two expressions after operator");
@@ -170,6 +173,7 @@ impl Parser {
                         "+" => Op2::Plus,
                         "-" => Op2::Minus,
                         "*" => Op2::Times,
+                        "/" => Op2::Divide,
                         ">" => Op2::Greater,
                         "<" => Op2::Less,
                         ">=" => Op2::GreaterEqual,
