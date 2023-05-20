@@ -550,7 +550,7 @@ impl Session {
             }
             Op2::Divide => {
                 self.emit_instrs([
-                    Instr::Xor(BinArgs::ToReg(Rdx, Arg32::Reg(Rdx))),
+                    Instr::Cqo,
                     Instr::IDiv(Rcx),
                     Instr::Sal(BinArgs::ToReg(Rax, Arg32::Imm(1))),
                     Instr::Jo(OVERFLOW_LBL.to_string()),

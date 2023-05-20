@@ -163,6 +163,7 @@ pub enum Instr {
 
     Lea(Reg, MemRef),
     Rep(StrOp),
+    Cqo,
 
     Comment(String),
 }
@@ -377,6 +378,7 @@ pub fn instr_to_string(i: &Instr) -> String {
             format!("  lea {}, {}", reg_to_string(*reg), mem_ref_to_string(*mem))
         }
         Instr::Rep(op) => format!("  rep {}", str_op_to_string(*op)),
+        Instr::Cqo => format!("  cqo"),
     }
 }
 
