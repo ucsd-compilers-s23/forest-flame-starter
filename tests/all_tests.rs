@@ -4,6 +4,11 @@ mod infra;
 success_tests! {
     // Vectors
     {
+        name: forest_flame_vec1,
+        file: "forest_flame_vec1.snek",
+        expected: "[0, 1, 2, 3]"
+    },
+    {
         name: forest_flame_kmp,
         file: "forest_flame_kmp.snek",
         expected: "3"
@@ -19,6 +24,11 @@ success_tests! {
         file: "forest_flame_bin_search.snek",
         input: "88",
         expected: "7"
+    },
+    {
+        name: forest_flame_quick_sort,
+        file: "forest_flame_quick_sort.snek",
+        expected: "[0, 1, 3, 6, 7, 9, 9, 10, 18, 38, 49]"
     },
     // Number and Boolean Literals
     {

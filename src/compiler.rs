@@ -257,7 +257,7 @@ impl Session {
                     return raise_undefined_fun(*fun);
                 };
                 if args.len() != *arity {
-                    raise_wrong_number_of_args(*arity, args.len());
+                    raise_wrong_number_of_args(*fun, *arity, args.len());
                 }
 
                 let mut nargs = args.len() as i32;
@@ -752,8 +752,8 @@ fn raise_undefined_fun(fun: Symbol) {
     panic!("function {fun} not defined")
 }
 
-fn raise_wrong_number_of_args(expected: usize, got: usize) {
-    panic!("function takes {expected} arguments but {got} were supplied")
+fn raise_wrong_number_of_args(fun: Symbol, expected: usize, got: usize) {
+    panic!("function {fun} takes {expected} arguments but {got} were supplied")
 }
 
 fn fun_label(fun: Symbol) -> String {

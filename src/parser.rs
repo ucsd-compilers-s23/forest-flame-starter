@@ -238,7 +238,7 @@ impl Parser {
         };
 
         if is_keyword(s) {
-            syntax_error("cannot use keyword as identifier")
+            syntax_error(format!("cannot use keyword `{s}` as identifier"))
         } else if self.id_regex.is_match(s) {
             Symbol::new(s)
         } else {

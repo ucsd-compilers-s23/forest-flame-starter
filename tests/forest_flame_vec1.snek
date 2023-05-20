@@ -1,7 +1,7 @@
-(let ((v (vec 5 0)))
+(let ((v (make-vec 4 0)))
     (block
-        (vecset! v 0 1)
-        (vecset! v 1 2)
-        (vecset! v 2 3)
-        (vecset! v 3 4)
+        (vec-set! v 0 0)
+        (vec-set! v 1 1)
+        (vec-set! v 2 2)
+        (vec-set! v 3 3)
 	v))
