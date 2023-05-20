@@ -107,7 +107,7 @@ pub fn compile(prg: &Prog) -> String {
                 Instr::Mov(MovArgs::ToReg(STACK_BASE, Arg64::Reg(Rbp))),
                 Instr::Mov(MovArgs::ToReg(INPUT_REG, Arg64::Reg(Rdi))),
                 Instr::Mov(MovArgs::ToReg(HEAP_PTR, Arg64::Reg(Rsi))),
-                Instr::Mov(MovArgs::ToReg(HEAP_END, Arg64::Reg(Rcx))),
+                Instr::Mov(MovArgs::ToReg(HEAP_END, Arg64::Reg(Rdx))),
             ]);
             sess.compile_expr(&Ctxt::new(), Loc::Reg(Rax), &prg.main);
             sess.fun_exit(locals, &callee_saved);
@@ -152,7 +152,7 @@ impl Session {
     }
 
     fn fun_entry(&mut self, locals: u32, callee_saved: &[Reg]) {
-        let size = stack_size(locals, callee_saved);
+        let size = frame_size(locals, callee_saved);
         for reg in callee_saved {
             self.emit_instr(Instr::Push(Arg32::Reg(*reg)));
         }
@@ -164,7 +164,7 @@ impl Session {
     }
 
     fn fun_exit(&mut self, locals: u32, calle_saved: &[Reg]) {
-        let size = stack_size(locals, calle_saved);
+        let size = frame_size(locals, calle_saved);
         self.emit_instrs([Instr::Add(BinArgs::ToReg(
             Rsp,
             Arg32::Imm(8 * (size as i32)),
@@ -264,14 +264,12 @@ impl Session {
                 if nargs % 2 == 0 {
                     self.emit_instr(Instr::Sub(BinArgs::ToReg(Rsp, Arg32::Imm(8 * nargs))));
                 } else {
-                    let mem = mref![Rsp + %(8 * nargs)];
-                    nargs += 1;
                     self.emit_instrs([
+                        Instr::Push(Arg32::Imm(MEM_SET_VAL)),
                         Instr::Sub(BinArgs::ToReg(Rsp, Arg32::Imm(8 * nargs))),
-                        Instr::Mov(MovArgs::ToMem(mem, Reg32::Imm(MEM_SET_VAL))),
                     ]);
+                    nargs += 1;
                 }
-
                 for (i, arg) in args.iter().enumerate() {
                     self.compile_expr(cx, Loc::Mem(mref![Rsp + %(8 * i)]), arg);
                 }
@@ -305,8 +303,9 @@ impl Session {
                     Instr::Jl(INVALID_SIZE.to_string()),
                     Instr::Lea(Rax, mref![HEAP_PTR + 8 * Rdi + 16]),
                     Instr::Cmp(BinArgs::ToReg(Rax, Arg32::Reg(HEAP_END))),
-                    Instr::Jg(alloc_finish_lbl.clone()),
-                    // The size is already in %rdi
+                    Instr::Jle(alloc_finish_lbl.clone()),
+                    // Call try_gc to ensure we can allocate `size + 1` quad words (1 extra for the size of the vector)
+                    Instr::Add(BinArgs::ToReg(Rdi, Arg32::Imm(1))),
                     Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(HEAP_PTR))),
                     Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(STACK_BASE))),
                     Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rsp))),
@@ -346,8 +345,9 @@ impl Session {
                 self.emit_instrs([
                     Instr::Lea(Rax, mref![HEAP_PTR + %(8 * (size + 2))]),
                     Instr::Cmp(BinArgs::ToReg(Rax, Arg32::Reg(HEAP_END))),
-                    Instr::Jg(vec_alloc_finish_lbl.clone()),
-                    // The size is already in Rdi
+                    Instr::Jle(vec_alloc_finish_lbl.clone()),
+                    // Call try_gc to ensure we can allocate `size + 1` quad words (1 extra for the size of the vector)
+                    Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Imm(size as i64 + 1))),
                     Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(HEAP_PTR))),
                     Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(STACK_BASE))),
                     Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rsp))),
@@ -357,11 +357,10 @@ impl Session {
                     Instr::Mov(MovArgs::ToMem(mref!(HEAP_PTR + 8), Reg32::Imm(size))),
                 ]);
 
-                for i in 0..elems.len() {
-                    let si = cx.si as usize;
+                for i in 0..elems.len() as u32 {
                     self.move_to(
                         Loc::Mem(mref!(HEAP_PTR + %(8 * (i + 2)))),
-                        Arg64::Mem(mref!(Rbp - %(8 * (si + i + 1)))),
+                        Arg64::Mem(mref!(Rbp - %(8 * (cx.si + i + 1)))),
                     )
                 }
 
@@ -639,7 +638,7 @@ impl Session {
     }
 }
 
-fn stack_size(locals: u32, calle_saved: &[Reg]) -> u32 {
+fn frame_size(locals: u32, calle_saved: &[Reg]) -> u32 {
     // #locals + #callee saved + return address
     let n = locals + calle_saved.len() as u32 + 1;
     if n % 2 == 0 {
@@ -651,22 +650,20 @@ fn stack_size(locals: u32, calle_saved: &[Reg]) -> u32 {
 
 fn depth(e: &Expr) -> u32 {
     match e {
-        Expr::BinOp(_, e1, e2) => u32::max(depth(e1), depth(e2) + 1),
+        Expr::BinOp(_, e1, e2) => depth(e1).max(depth(e2) + 1),
         Expr::Let(bindings, e) => {
             let max = bindings
                 .iter()
                 .map(|(_, e)| depth(e))
                 .max()
                 .unwrap_or_default();
-            u32::max(max, depth(e) + bindings.len() as u32)
+            max.max(depth(e) + bindings.len() as u32)
         }
         Expr::If(e1, e2, e3) => depth(e1).max(depth(e2)).max(depth(e3)),
         Expr::Call(_, es) | Expr::Block(es) => es.iter().map(depth).max().unwrap_or(0),
         Expr::UnOp(_, e) | Expr::Loop(e) | Expr::Break(e) | Expr::Set(_, e) => depth(e),
-        Expr::MakeVec(size, elem) => u32::max(depth(size), depth(elem) + 1) + 1,
-        Expr::Vec(elems) => {
-            elems.iter().map(|e| depth(e)).max().unwrap_or_default() + elems.len() as u32
-        }
+        Expr::MakeVec(size, elem) => depth(size).max(depth(elem)) + 2,
+        Expr::Vec(elems) => elems.iter().map(|e| depth(e)).max().unwrap_or(0) + elems.len() as u32,
         Expr::VecSet(vec, idx, val) => depth(vec).max(depth(idx) + 1).max(depth(val) + 2),
         Expr::VecGet(vec, idx) => depth(vec).max(depth(idx) + 1),
         Expr::PrintStack

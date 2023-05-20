@@ -17,7 +17,6 @@ const FALSE: u64 = 3;
 
 static mut HEAP_START: *const u64 = std::ptr::null();
 static mut HEAP_END: *const u64 = std::ptr::null();
-static mut HEAP_PTR: *const u64 = std::ptr::null();
 
 #[link(name = "our_code")]
 extern "C" {
@@ -52,7 +51,7 @@ pub unsafe extern "C" fn snek_print(val: SnekVal) -> SnekVal {
 
 #[export_name = "\x01snek_try_gc"]
 unsafe fn snek_try_gc(
-    vec_size: isize,
+    count: isize,
     heap_ptr: *mut u64,
     stack_start: *const u64,
     stack_end: *const u64,
@@ -124,7 +123,6 @@ fn main() {
     unsafe {
         HEAP_START = heap.as_mut_ptr();
         HEAP_END = HEAP_START.add(heap_size);
-        HEAP_PTR = HEAP_END;
     }
 
     let i: u64 = unsafe { our_code_starts_here(input, HEAP_START, HEAP_END) };
