@@ -4,31 +4,43 @@ mod infra;
 success_tests! {
     // Vectors
     {
+        name: forest_flame_vec_get_succ,
+        file: "forest_flame_vec_get.snek",
+        input: "0",
+        expected: "0",
+    },
+    {
+        name: forest_flame_vec_set_succ,
+        file: "forest_flame_vec_set.snek",
+        input: "0",
+        expected: "[1, 0, 0]",
+    },
+    {
         name: forest_flame_vec1,
         file: "forest_flame_vec1.snek",
-        expected: "[0, 1, 2, 3]"
+        expected: "[0, 1, 2, 3]",
     },
     {
         name: forest_flame_kmp,
         file: "forest_flame_kmp.snek",
-        expected: "3"
+        expected: "3",
     },
     {
         name: forest_flame_bin_search0,
         file: "forest_flame_bin_search.snek",
         input: "3",
-        expected: "2"
+        expected: "2",
     },
     {
         name: forest_flame_bin_search1,
         file: "forest_flame_bin_search.snek",
         input: "88",
-        expected: "7"
+        expected: "7",
     },
     {
         name: forest_flame_quick_sort,
         file: "forest_flame_quick_sort.snek",
-        expected: "[0, 1, 3, 6, 7, 9, 9, 10, 18, 38, 49]"
+        expected: "[0, 1, 3, 6, 7, 9, 9, 10, 18, 38, 49]",
     },
     // Number and Boolean Literals
     {
@@ -406,6 +418,31 @@ success_tests! {
 }
 
 runtime_error_tests! {
+    // Vectors
+    {
+        name: forest_flame_vec_get_fail1,
+        file: "forest_flame_vec_get.snek",
+        input: "-1",
+        expected: "index out of bounds",
+    },
+    {
+        name: forest_flame_vec_get_fail2,
+        file: "forest_flame_vec_get.snek",
+        input: "3",
+        expected: "index out of bounds",
+    },
+    {
+        name: forest_flame_vec_set_fail1,
+        file: "forest_flame_vec_set.snek",
+        input: "-1",
+        expected: "index out of bounds",
+    },
+    {
+        name: forest_flame_vec_set_fail2,
+        file: "forest_flame_vec_set.snek",
+        input: "3",
+        expected: "index out of bounds",
+    },
     // integer overflow
     {
         name: cobra_number_overflow_fail0,

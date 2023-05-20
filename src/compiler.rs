@@ -17,15 +17,15 @@ struct Session {
     funs: HashMap<Symbol, usize>,
 }
 
-const INVALID_ARG_LBL: &str = "invalid_argument";
-const OVERFLOW_LBL: &str = "overflow";
+const INVALID_ARG: &str = "invalid_argument";
+const OVERFLOW: &str = "overflow";
 const INDEX_OUT_OF_BOUNDS: &str = "index_out_of_bounds";
-const INVALID_SIZE_LBL: &str = "invalid_vec_size";
+const INVALID_SIZE: &str = "invalid_vec_size";
 
-const STACK_BASE_REG: Reg = Rbx;
+const STACK_BASE: Reg = Rbx;
 const INPUT_REG: Reg = R13;
-const HEAP_END_REG: Reg = R14;
-const HEAP_PTR_REG: Reg = R15;
+const HEAP_END: Reg = R14;
+const HEAP_PTR: Reg = R15;
 
 const MEM_SET_VAL: i32 = 0b001;
 
@@ -47,7 +47,7 @@ impl<'a> Ctxt<'a> {
         }
     }
 
-    fn fun(params: &[Symbol]) -> Ctxt<'a> {
+    fn with_params(params: &[Symbol]) -> Ctxt<'a> {
         let env = params
             .iter()
             .enumerate()
@@ -101,16 +101,16 @@ pub fn compile(prg: &Prog) -> String {
             let locals = depth(&prg.main);
             sess.compile_funs(&prg.funs);
             sess.emit_instr(Instr::Label("our_code_starts_here".to_string()));
-            let callee_saved_regs = [Rbp, STACK_BASE_REG, INPUT_REG, HEAP_END_REG, HEAP_PTR_REG];
-            sess.fun_entry(locals, &callee_saved_regs);
+            let callee_saved = [Rbp, STACK_BASE, INPUT_REG, HEAP_END, HEAP_PTR];
+            sess.fun_entry(locals, &callee_saved);
             sess.emit_instrs([
-                Instr::Mov(MovArgs::ToReg(STACK_BASE_REG, Arg64::Reg(Rbp))),
+                Instr::Mov(MovArgs::ToReg(STACK_BASE, Arg64::Reg(Rbp))),
                 Instr::Mov(MovArgs::ToReg(INPUT_REG, Arg64::Reg(Rdi))),
-                Instr::Mov(MovArgs::ToReg(HEAP_PTR_REG, Arg64::Reg(Rsi))),
-                Instr::Mov(MovArgs::ToReg(HEAP_END_REG, Arg64::Reg(Rcx))),
+                Instr::Mov(MovArgs::ToReg(HEAP_PTR, Arg64::Reg(Rsi))),
+                Instr::Mov(MovArgs::ToReg(HEAP_END, Arg64::Reg(Rcx))),
             ]);
             sess.compile_expr(&Ctxt::new(), Loc::Reg(Rax), &prg.main);
-            sess.fun_exit(locals, &callee_saved_regs);
+            sess.fun_exit(locals, &callee_saved);
 
             format!(
                 "
@@ -122,16 +122,16 @@ extern snek_print_stack
 extern snek_try_gc
 global our_code_starts_here
 {}
-{INVALID_ARG_LBL}:
+{INVALID_ARG}:
   mov edi, 1
   call snek_error
-{OVERFLOW_LBL}:
+{OVERFLOW}:
   mov edi, 2
   call snek_error
 {INDEX_OUT_OF_BOUNDS}:
   mov edi, 3
   call snek_error
-{INVALID_SIZE_LBL}:
+{INVALID_SIZE}:
   mov edi, 4
   call snek_error
 ",
@@ -186,7 +186,7 @@ impl Session {
         let locals = depth(&fun.body);
         self.emit_instr(Instr::Label(fun_label(fun.name)));
         self.fun_entry(locals, &[Rbp]);
-        self.compile_expr(&Ctxt::fun(&fun.params), Loc::Reg(Rax), &fun.body);
+        self.compile_expr(&Ctxt::with_params(&fun.params), Loc::Reg(Rax), &fun.body);
         self.fun_exit(locals, &[Rbp]);
     }
 
@@ -302,32 +302,31 @@ impl Session {
                 self.emit_instrs([
                     Instr::Sar(BinArgs::ToReg(Rdi, Arg32::Imm(1))),
                     Instr::Cmp(BinArgs::ToReg(Rdi, Arg32::Imm(0))),
-                    Instr::Jl(INVALID_SIZE_LBL.to_string()),
-                    Instr::Lea(Rax, mref![HEAP_PTR_REG + 8 * Rdi + 16]),
-                    Instr::Cmp(BinArgs::ToReg(Rax, Arg32::Reg(HEAP_END_REG))),
+                    Instr::Jl(INVALID_SIZE.to_string()),
+                    Instr::Lea(Rax, mref![HEAP_PTR + 8 * Rdi + 16]),
+                    Instr::Cmp(BinArgs::ToReg(Rax, Arg32::Reg(HEAP_END))),
                     Instr::Jg(alloc_finish_lbl.clone()),
-                    // The size is already in Rdi
-                    Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(HEAP_PTR_REG))),
-                    Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(STACK_BASE_REG))),
+                    // The size is already in %rdi
+                    Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(HEAP_PTR))),
+                    Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(STACK_BASE))),
                     Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rsp))),
                     Instr::Call("snek_try_gc".to_string()),
-                    Instr::Mov(MovArgs::ToReg(HEAP_PTR_REG, Arg64::Reg(Rax))),
+                    Instr::Mov(MovArgs::ToReg(HEAP_PTR, Arg64::Reg(Rax))),
                     Instr::Label(alloc_finish_lbl),
-                    // Load size in %rcx
+                    // Load size again in %rsi
                     Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Mem(size_mem))),
                     Instr::Sar(BinArgs::ToReg(Rsi, Arg32::Imm(1))),
                     // Write size in heap ptr + 8
-                    Instr::Mov(MovArgs::ToMem(mref!(HEAP_PTR_REG + 8), Reg32::Reg(Rsi))),
-                    // Fill vector by using `rep stosq` (%rdi = ptr, %rcx = count, %rax = val)
-                    Instr::Lea(Rdi, mref!(HEAP_PTR_REG + 16)),
+                    Instr::Mov(MovArgs::ToMem(mref!(HEAP_PTR + 8), Reg32::Reg(Rsi))),
+                    // Fill vector using `rep stosq` (%rdi = ptr, %rcx = count, %rax = val)
+                    Instr::Lea(Rdi, mref!(HEAP_PTR + 16)),
                     Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rsi))),
                     Instr::Mov(MovArgs::ToReg(Rax, Arg64::Mem(elem_mem))),
                     Instr::Rep(Stosq),
-                    // Set current heap ptr as the value for the allocated vector
-                    Instr::Mov(MovArgs::ToReg(Rax, Arg64::Reg(HEAP_PTR_REG))),
-                    Instr::Xor(BinArgs::ToReg(Rax, Arg32::Imm(1))),
-                    // Move heap ptr
-                    Instr::Lea(HEAP_PTR_REG, mref!(HEAP_PTR_REG + 8 * Rsi + 16)),
+                    // Add tag to heap ptr and store it in %rax as the result of the expression
+                    Instr::Lea(Rax, mref!(HEAP_PTR + 1)),
+                    // Bump heap ptr
+                    Instr::Lea(HEAP_PTR, mref!(HEAP_PTR + 8 * Rsi + 16)),
                 ]);
                 self.memset(cx.si, 2, Reg32::Imm(MEM_SET_VAL));
                 self.move_to(dst, Arg64::Reg(Rax));
@@ -343,32 +342,34 @@ impl Session {
                     self.compile_expr(&currcx, Loc::Mem(mem), elem);
                     currcx = nextcx;
                 }
+
                 self.emit_instrs([
-                    Instr::Lea(Rax, mref![HEAP_PTR_REG + %(8 * (size + 2))]),
-                    Instr::Cmp(BinArgs::ToReg(Rax, Arg32::Reg(HEAP_END_REG))),
+                    Instr::Lea(Rax, mref![HEAP_PTR + %(8 * (size + 2))]),
+                    Instr::Cmp(BinArgs::ToReg(Rax, Arg32::Reg(HEAP_END))),
                     Instr::Jg(vec_alloc_finish_lbl.clone()),
                     // The size is already in Rdi
-                    Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(HEAP_PTR_REG))),
-                    Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(STACK_BASE_REG))),
+                    Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(HEAP_PTR))),
+                    Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(STACK_BASE))),
                     Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rsp))),
                     Instr::Call("snek_try_gc".to_string()),
-                    Instr::Mov(MovArgs::ToReg(HEAP_PTR_REG, Arg64::Reg(Rax))),
+                    Instr::Mov(MovArgs::ToReg(HEAP_PTR, Arg64::Reg(Rax))),
                     Instr::Label(vec_alloc_finish_lbl),
-                    Instr::Mov(MovArgs::ToMem(mref!(HEAP_PTR_REG + 8), Reg32::Imm(size))),
+                    Instr::Mov(MovArgs::ToMem(mref!(HEAP_PTR + 8), Reg32::Imm(size))),
                 ]);
 
                 for i in 0..elems.len() {
                     let si = cx.si as usize;
                     self.move_to(
-                        Loc::Mem(mref!(HEAP_PTR_REG + %(8 * (i + 2)))),
+                        Loc::Mem(mref!(HEAP_PTR + %(8 * (i + 2)))),
                         Arg64::Mem(mref!(Rbp - %(8 * (si + i + 1)))),
                     )
                 }
 
                 self.emit_instrs([
-                    Instr::Mov(MovArgs::ToReg(Rax, Arg64::Reg(HEAP_PTR_REG))),
-                    Instr::Xor(BinArgs::ToReg(Rax, Arg32::Imm(1))),
-                    Instr::Lea(HEAP_PTR_REG, mref!(HEAP_PTR_REG + %(8 * (size + 2)))),
+                    // Add tag to heap ptr and store it in %rax as the result of the expression
+                    Instr::Lea(Rax, mref!(HEAP_PTR + 1)),
+                    // Bump heap ptr
+                    Instr::Lea(HEAP_PTR, mref!(HEAP_PTR + %(8 * (size + 2)))),
                 ]);
                 self.memset(cx.si, elems.len() as u32, Reg32::Imm(MEM_SET_VAL));
                 self.move_to(dst, Arg64::Reg(Rax));
@@ -391,11 +392,11 @@ impl Session {
                 self.emit_instrs([
                     Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rax))),
                     Instr::Sub(BinArgs::ToReg(Rcx, Arg32::Imm(1))),
-                    Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Mem(mref![Rcx + 8]))),
                     Instr::Sar(BinArgs::ToReg(Rdi, Arg32::Imm(1))),
                     Instr::Cmp(BinArgs::ToReg(Rdi, Arg32::Imm(0))),
                     Instr::Jl(INDEX_OUT_OF_BOUNDS.to_string()),
-                    Instr::Cmp(BinArgs::ToReg(Rdi, Arg32::Reg(Rcx))),
+                    Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Mem(mref![Rcx + 8]))),
+                    Instr::Cmp(BinArgs::ToReg(Rdi, Arg32::Reg(Rdx))),
                     Instr::Jge(INDEX_OUT_OF_BOUNDS.to_string()),
                     Instr::Mov(MovArgs::ToMem(mref![Rcx + 8 * Rdi + 16], Reg32::Reg(Rsi))),
                 ]);
@@ -425,7 +426,7 @@ impl Session {
             }
             Expr::PrintStack => {
                 self.emit_instrs([
-                    Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Reg(STACK_BASE_REG))),
+                    Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Reg(STACK_BASE))),
                     Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(Rsp))),
                     Instr::Call("snek_print_stack".to_string()),
                 ]);
@@ -451,14 +452,14 @@ impl Session {
                 self.check_is_num(Reg::Rax);
                 self.emit_instrs([
                     Instr::Add(BinArgs::ToReg(Rax, 1.repr32())),
-                    Instr::Jo(OVERFLOW_LBL.to_string()),
+                    Instr::Jo(OVERFLOW.to_string()),
                 ])
             }
             Op1::Sub1 => {
                 self.check_is_num(Reg::Rax);
                 self.emit_instrs([
                     Instr::Sub(BinArgs::ToReg(Rax, 1.repr32())),
-                    Instr::Jo(OVERFLOW_LBL.to_string()),
+                    Instr::Jo(OVERFLOW.to_string()),
                 ])
             }
             Op1::IsNum => {
@@ -522,7 +523,7 @@ impl Session {
                     Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(Rax))),
                     Instr::Or(BinArgs::ToReg(Rdx, Arg32::Reg(Rcx))),
                     Instr::Test(BinArgs::ToReg(Rdx, Arg32::Imm(0b01))),
-                    Instr::Jnz(INVALID_ARG_LBL.to_string()),
+                    Instr::Jnz(INVALID_ARG.to_string()),
                     Instr::Label(check_eq_finish_lbl.to_string()),
                 ]);
             }
@@ -532,20 +533,20 @@ impl Session {
             Op2::Plus => {
                 self.emit_instrs([
                     Instr::Add(BinArgs::ToReg(Rax, Arg32::Reg(Rcx))),
-                    Instr::Jo(OVERFLOW_LBL.to_string()),
+                    Instr::Jo(OVERFLOW.to_string()),
                 ]);
             }
             Op2::Minus => {
                 self.emit_instrs([
                     Instr::Sub(BinArgs::ToReg(Rax, Arg32::Reg(Rcx))),
-                    Instr::Jo(OVERFLOW_LBL.to_string()),
+                    Instr::Jo(OVERFLOW.to_string()),
                 ]);
             }
             Op2::Times => {
                 self.emit_instrs([
                     Instr::Sar(BinArgs::ToReg(Rax, Arg32::Imm(1))),
                     Instr::IMul(BinArgs::ToReg(Rax, Arg32::Reg(Rcx))),
-                    Instr::Jo(OVERFLOW_LBL.to_string()),
+                    Instr::Jo(OVERFLOW.to_string()),
                 ]);
             }
             Op2::Divide => {
@@ -553,7 +554,7 @@ impl Session {
                     Instr::Cqo,
                     Instr::IDiv(Rcx),
                     Instr::Sal(BinArgs::ToReg(Rax, Arg32::Imm(1))),
-                    Instr::Jo(OVERFLOW_LBL.to_string()),
+                    Instr::Jo(OVERFLOW.to_string()),
                 ]);
             }
             Op2::Equal => self.compile_cmp(CMov::E),
@@ -611,16 +612,16 @@ impl Session {
     fn check_is_num(&mut self, reg: Reg) {
         self.emit_instrs([
             Instr::Test(BinArgs::ToReg(reg, Arg32::Imm(0b001))),
-            Instr::Jnz(INVALID_ARG_LBL.to_string()),
+            Instr::Jnz(INVALID_ARG.to_string()),
         ]);
     }
 
     fn check_is_vec(&mut self, reg: Reg) {
         self.emit_instrs([
             Instr::Test(BinArgs::ToReg(reg, Arg32::Imm(0b001))),
-            Instr::Jz(INVALID_ARG_LBL.to_string()), // jump if is num
+            Instr::Jz(INVALID_ARG.to_string()), // jump if is num
             Instr::Test(BinArgs::ToReg(reg, Arg32::Imm(0b010))),
-            Instr::Jnz(INVALID_ARG_LBL.to_string()), // jump if is bool
+            Instr::Jnz(INVALID_ARG.to_string()), // jump if is bool
         ]);
     }
 

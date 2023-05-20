@@ -29,17 +29,17 @@ extern "C" {
 }
 
 #[export_name = "\x01snek_error"]
-pub extern "C" fn snek_error(errcode: ErrCode) {
-    if errcode == ErrCode::InvalidArgument {
+pub extern "C" fn snek_error(errcode: i64) {
+    if errcode == ErrCode::InvalidArgument as i64 {
         eprintln!("invalid argument");
-    } else if errcode == ErrCode::Overflow {
+    } else if errcode == ErrCode::Overflow as i64 {
         eprintln!("overflow");
-    } else if errcode == ErrCode::IndexOutOfBounds {
+    } else if errcode == ErrCode::IndexOutOfBounds as i64 {
         eprintln!("index out of bounds");
-    } else if errcode == ErrCode::InvalidVecSize {
+    } else if errcode == ErrCode::InvalidVecSize as i64 {
         eprintln!("vector size must be non-negative");
     } else {
-        eprintln!("an error ocurred {}", errcode as i32);
+        eprintln!("an error ocurred {}", errcode);
     }
     std::process::exit(errcode as i32);
 }
