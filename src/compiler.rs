@@ -27,7 +27,7 @@ const INPUT_REG: Reg = R13;
 const HEAP_END: Reg = R14;
 const HEAP_PTR: Reg = R15;
 
-const NIL : i32 = 0b001;
+const NIL: i32 = 0b001;
 const MEM_SET_VAL: i32 = NIL;
 
 #[derive(Debug, Clone)]
@@ -482,7 +482,17 @@ impl Session {
                     Instr::CMov(CMov::E(Rax, Arg64::Reg(Rcx))),
                 ]);
             }
-
+            Op1::IsVec => {
+                self.emit_instrs([
+                    Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(Rax))),
+                    Instr::Mov(MovArgs::ToReg(Rax, true.repr64())),
+                    Instr::Mov(MovArgs::ToReg(Rcx, false.repr64())),
+                    Instr::Test(BinArgs::ToReg(Rdx, Arg32::Imm(0b01))),
+                    Instr::CMov(CMov::Z(Rax, Arg64::Reg(Rcx))),
+                    Instr::Test(BinArgs::ToReg(Rdx, Arg32::Imm(0b10))),
+                    Instr::CMov(CMov::NZ(Rax, Arg64::Reg(Rcx))),
+                ]);
+            }
             Op1::Print => self.emit_instrs([
                 Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Reg(Rax))),
                 Instr::Call("snek_print".to_string()),

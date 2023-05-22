@@ -141,7 +141,7 @@ impl Parser {
                 [Sexp::Atom(S(keyword)), es @ ..]
                     if matches!(
                         &keyword[..],
-                        "loop" | "break" | "add1" | "sub1" | "isnum" | "isbool" | "print"
+                        "loop" | "break" | "add1" | "sub1" | "isnum" | "isbool" | "isvec" | "print"
                     ) =>
                 {
                     let [e] = es else {
@@ -157,6 +157,7 @@ impl Parser {
                         "sub1" => Expr::UnOp(Op1::Sub1, Box::new(e_expr)),
                         "isnum" => Expr::UnOp(Op1::IsNum, Box::new(e_expr)),
                         "isbool" => Expr::UnOp(Op1::IsBool, Box::new(e_expr)),
+                        "isvec" => Expr::UnOp(Op1::IsVec, Box::new(e_expr)),
                         _ => unreachable!(),
                     }
                 }
@@ -257,6 +258,7 @@ fn is_keyword(s: &str) -> bool {
             | "sub1"
             | "isnum"
             | "isbool"
+            | "isvec"
             | "print"
             | "let"
             | "set!"

@@ -93,6 +93,7 @@ unsafe fn snek_str(val: SnekVal, seen: &mut HashSet<SnekVal>) -> String {
                 res = res + ", ";
             }
         }
+        seen.remove(&val);
         res + "]"
     } else {
         format!("unknown value: {val}")

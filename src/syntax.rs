@@ -46,6 +46,7 @@ pub enum Op1 {
     Sub1,
     IsNum,
     IsBool,
+    IsVec,
     Print,
 }
 

@@ -111,6 +111,7 @@ pub enum Loc {
 pub enum CMov {
     E(Reg, Arg64),
     Z(Reg, Arg64),
+    NZ(Reg, Arg64),
     NE(Reg, Arg64),
     G(Reg, Arg64),
     GE(Reg, Arg64),
@@ -357,6 +358,9 @@ pub fn instr_to_string(i: &Instr) -> String {
             }
             CMov::Z(reg, arg) => {
                 format!("  cmovz {}, {}", reg_to_string(*reg), arg64_to_string(arg))
+            }
+            CMov::NZ(reg, arg) => {
+                format!("  cmovnz {}, {}", reg_to_string(*reg), arg64_to_string(arg))
             }
             CMov::NE(reg, arg) => {
                 format!("  cmovne {}, {}", reg_to_string(*reg), arg64_to_string(arg))

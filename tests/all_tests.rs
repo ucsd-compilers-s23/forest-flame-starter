@@ -4,6 +4,30 @@ mod infra;
 success_tests! {
     // Vectors
     {
+        name: forest_flame_is_vec_fail0,
+        file: "forest_flame_input_is_vec.snek",
+        input: "0",
+        expected: "false"
+    },
+    {
+        name: forest_flame_is_vec_fail1,
+        file: "forest_flame_input_is_vec.snek",
+        input: "1",
+        expected: "false",
+    },
+    {
+        name: forest_flame_is_vec_fail2,
+        file: "forest_flame_nil_is_vec.snek",
+        input: "1",
+        expected: "true",
+    },
+    {
+        name: forest_flame_is_vec_fail3,
+        file: "forest_flame_vec_is_vec.snek",
+        input: "1",
+        expected: "true",
+    },
+    {
         name: forest_flame_vec_get_succ,
         file: "forest_flame_vec_get.snek",
         input: "0",
