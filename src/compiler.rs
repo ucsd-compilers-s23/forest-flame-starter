@@ -121,6 +121,7 @@ extern snek_print
 extern snek_alloc_vec
 extern snek_print_stack
 extern snek_try_gc
+extern snek_gc
 global our_code_starts_here
 {}
 {INVALID_ARG}:
@@ -352,11 +353,13 @@ impl Session {
                     Instr::Lea(Rax, mref![HEAP_PTR + %(8 * (size + 2))]),
                     Instr::Cmp(BinArgs::ToReg(Rax, Arg32::Reg(HEAP_END))),
                     Instr::Jle(vec_alloc_finish_lbl.clone()),
-                    // Call try_gc to ensure we can allocate `size + 1` quad words (1 extra for the size of the vector)
+                    // Call try_gc to ensure we can allocate `size + 2` quad words
+                    // (1 extra for the size of the vector + 1 extra for the GC metadata)
                     Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Imm(size as i64 + 1))),
                     Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(HEAP_PTR))),
                     Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(STACK_BASE))),
-                    Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rsp))),
+                    Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rbp))),
+                    Instr::Mov(MovArgs::ToReg(R8, Arg64::Reg(Rsp))),
                     Instr::Call("snek_try_gc".to_string()),
                     Instr::Mov(MovArgs::ToReg(HEAP_PTR, Arg64::Reg(Rax))),
                     Instr::Label(vec_alloc_finish_lbl),
@@ -431,14 +434,6 @@ impl Session {
                 ]);
                 self.move_to(dst, Arg64::Reg(Rax));
             }
-            Expr::PrintStack => {
-                self.emit_instrs([
-                    Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Reg(STACK_BASE))),
-                    Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(Rsp))),
-                    Instr::Call("snek_print_stack".to_string()),
-                ]);
-                self.move_to(dst, 0.repr32());
-            }
             Expr::VecLen(vec) => {
                 self.compile_expr(cx, Loc::Reg(Rax), vec);
                 self.check_is_vec(Rax);
@@ -449,6 +444,25 @@ impl Session {
                     Instr::Sal(BinArgs::ToReg(Rax, Arg32::Imm(1))),
                 ]);
                 self.move_to(dst, Arg64::Reg(Rax));
+            }
+            Expr::Gc => {
+                self.emit_instrs([
+                    Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Reg(HEAP_PTR))),
+                    Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(STACK_BASE))),
+                    Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(Rbp))),
+                    Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rsp))),
+                    Instr::Call("snek_gc".to_string()),
+                    Instr::Mov(MovArgs::ToReg(HEAP_PTR, Arg64::Reg(Rax))),
+                ]);
+                self.move_to(dst, 0.repr32());
+            }
+            Expr::PrintStack => {
+                self.emit_instrs([
+                    Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Reg(STACK_BASE))),
+                    Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(Rsp))),
+                    Instr::Call("snek_print_stack".to_string()),
+                ]);
+                self.move_to(dst, 0.repr32());
             }
         }
     }
@@ -699,6 +713,7 @@ fn depth(e: &Expr) -> u32 {
         Expr::VecSet(vec, idx, val) => depth(vec).max(depth(idx) + 1).max(depth(val) + 2),
         Expr::VecGet(vec, idx) => depth(vec).max(depth(idx) + 1),
         Expr::PrintStack
+        | Expr::Gc
         | Expr::VecLen(_)
         | Expr::Input
         | Expr::Nil

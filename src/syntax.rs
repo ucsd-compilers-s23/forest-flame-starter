@@ -38,6 +38,7 @@ pub enum Expr {
     Input,
     Nil,
     PrintStack,
+    Gc,
 }
 
 #[derive(Debug, Copy, Clone)]

@@ -47,10 +47,23 @@ impl Parser {
                 "false" => Expr::Boolean(false),
                 "input" => Expr::Input,
                 "nil" => Expr::Nil,
-                "printstack" => Expr::PrintStack,
                 _ => Expr::Var(Symbol::new(id)),
             },
             Sexp::List(vec) => match &vec[..] {
+                // (snek-printstack)
+                [Sexp::Atom(S(keyword)), es @ ..] if keyword == "snek-printstack" => {
+                    if !es.is_empty() {
+                        return syntax_error("snek-prinstack doesn't take any arguments");
+                    }
+                    Expr::PrintStack
+                }
+                // (gc)
+                [Sexp::Atom(S(keyword)), es @ ..] if keyword == "gc" => {
+                    if !es.is_empty() {
+                        return syntax_error("gc doesn't take any arguments");
+                    }
+                    Expr::Gc
+                }
                 // (make-vec size elem)
                 [Sexp::Atom(S(keyword)), es @ ..] if keyword == "make-vec" => {
                     let [size, elem] = &es[..] else {
@@ -270,7 +283,8 @@ fn is_keyword(s: &str) -> bool {
             | "vec-set!"
             | "vec-get"
             | "vec-len"
-            | "printstack"
+            | "snek-printstack"
+            | "gc"
     )
 }
 
