@@ -53,18 +53,19 @@ pub unsafe extern "C" fn snek_print(val: SnekVal) -> SnekVal {
 unsafe fn snek_try_gc(
     count: isize,
     heap_ptr: *mut u64,
-    stack_start: *const u64,
-    stack_end: *const u64,
+    stack_base: *const u64,
+    curr_rbp: *const u64,
+    curr_rsp: *const u64,
 ) -> *mut u64 {
     eprintln!("out of memory");
     std::process::exit(ErrCode::OutOfMemory as i32)
 }
 
 #[export_name = "\x01snek_print_stack"]
-unsafe fn snek_print_stack(stack_start: *const u64, stack_end: *const u64) {
-    let mut ptr = stack_start;
+unsafe fn snek_print_stack(stack_base: *const u64, curr_rbp: *const u64, curr_rsp: *const u64) {
+    let mut ptr = stack_base;
     println!("-----------------------------------------");
-    while ptr >= stack_end {
+    while ptr >= cur_rsp {
         let val = *ptr;
         println!("{ptr:?}: {:#0x}", val);
         ptr = ptr.sub(1);

@@ -308,11 +308,13 @@ impl Session {
                     Instr::Lea(Rax, mref![HEAP_PTR + 8 * Rdi + 16]),
                     Instr::Cmp(BinArgs::ToReg(Rax, Arg32::Reg(HEAP_END))),
                     Instr::Jle(alloc_finish_lbl.clone()),
-                    // Call try_gc to ensure we can allocate `size + 1` quad words (1 extra for the size of the vector)
+                    // Call try_gc to ensure we can allocate `size + 2` quad words
+                    // (1 extra for the size of the vector + 1 extra for the GC metadata)
                     Instr::Add(BinArgs::ToReg(Rdi, Arg32::Imm(1))),
                     Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(HEAP_PTR))),
                     Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(STACK_BASE))),
-                    Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rsp))),
+                    Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rbp))),
+                    Instr::Mov(MovArgs::ToReg(R8, Arg64::Reg(Rsp))),
                     Instr::Call("snek_try_gc".to_string()),
                     Instr::Mov(MovArgs::ToReg(HEAP_PTR, Arg64::Reg(Rax))),
                     Instr::Label(alloc_finish_lbl),
