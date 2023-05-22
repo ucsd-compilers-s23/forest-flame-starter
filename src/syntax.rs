@@ -36,6 +36,7 @@ pub enum Expr {
     Block(Vec<Expr>),
     Call(Symbol, Vec<Expr>),
     Input,
+    Nil,
     PrintStack,
 }
 

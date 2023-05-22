@@ -27,7 +27,8 @@ const INPUT_REG: Reg = R13;
 const HEAP_END: Reg = R14;
 const HEAP_PTR: Reg = R15;
 
-const MEM_SET_VAL: i32 = 0b001;
+const NIL : i32 = 0b001;
+const MEM_SET_VAL: i32 = NIL;
 
 #[derive(Debug, Clone)]
 struct Ctxt<'a> {
@@ -278,6 +279,9 @@ impl Session {
                     Instr::Add(BinArgs::ToReg(Rsp, Arg32::Imm(8 * nargs))),
                 ]);
                 self.move_to(dst, Arg64::Reg(Rax));
+            }
+            Expr::Nil => {
+                self.move_to(dst, Arg32::Imm(NIL));
             }
             Expr::Input => {
                 if cx.in_fun {
@@ -675,6 +679,7 @@ fn depth(e: &Expr) -> u32 {
         Expr::PrintStack
         | Expr::VecLen(_)
         | Expr::Input
+        | Expr::Nil
         | Expr::Var(_)
         | Expr::Number(_)
         | Expr::Boolean(_) => 0,

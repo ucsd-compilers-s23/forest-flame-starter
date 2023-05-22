@@ -46,6 +46,7 @@ impl Parser {
                 "true" => Expr::Boolean(true),
                 "false" => Expr::Boolean(false),
                 "input" => Expr::Input,
+                "nil" => Expr::Nil,
                 "printstack" => Expr::PrintStack,
                 _ => Expr::Var(Symbol::new(id)),
             },
@@ -260,6 +261,7 @@ fn is_keyword(s: &str) -> bool {
             | "let"
             | "set!"
             | "input"
+            | "nil"
             | "fun"
             | "make-vec"
             | "vec"

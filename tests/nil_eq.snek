@@ -1,0 +1,3 @@
+(let ((n nil))
+  (let ((m nil))
+    (= n m)))

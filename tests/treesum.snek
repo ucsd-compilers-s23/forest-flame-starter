@@ -1,0 +1,6 @@
+(fun (ts t)
+  (if (= nil t) 0
+      (+ (vec-get t 0) (+ (ts (vec-get t 1)) (ts (vec-get t 2))))))
+
+(ts (vec 7 (vec 9 nil nil) (vec 11 nil (vec 4 nil nil))))
+
