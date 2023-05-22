@@ -4,6 +4,12 @@ mod infra;
 success_tests! {
     // Vectors
     {
+        name: reversell,
+        file: "reversell.snek",
+        input: "1001",
+        expected: "[19, [18, [17, [16, [15, [14, [13, [12, [11, [10, [9, [8, [7, [6, [5, [4, [3, [2, [1, [0, [-1, [-2, [-3, [-4, [-5, nil]]]]]]]]]]]]]]]]]]]]]]]]]"
+    },
+    {
         name: forest_flame_nil_eq,
         file: "forest_flame_nil_eq.snek",
         expected: "true"
