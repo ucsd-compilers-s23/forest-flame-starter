@@ -654,16 +654,22 @@ fn depth(e: &Expr) -> u32 {
         Expr::Let(bindings, e) => {
             let max = bindings
                 .iter()
-                .map(|(_, e)| depth(e))
+                .enumerate()
+                .map(|(i, (_, e))| depth(e) + (i as u32))
                 .max()
-                .unwrap_or_default();
+                .unwrap_or(0);
             max.max(depth(e) + bindings.len() as u32)
         }
         Expr::If(e1, e2, e3) => depth(e1).max(depth(e2)).max(depth(e3)),
         Expr::Call(_, es) | Expr::Block(es) => es.iter().map(depth).max().unwrap_or(0),
         Expr::UnOp(_, e) | Expr::Loop(e) | Expr::Break(e) | Expr::Set(_, e) => depth(e),
-        Expr::MakeVec(size, elem) => depth(size).max(depth(elem)) + 2,
-        Expr::Vec(elems) => elems.iter().map(|e| depth(e)).max().unwrap_or(0) + elems.len() as u32,
+        Expr::MakeVec(size, elem) => depth(size).max(depth(elem) + 1),
+        Expr::Vec(elems) => elems
+            .iter()
+            .enumerate()
+            .map(|(i, e)| depth(e) + (i as u32))
+            .max()
+            .unwrap_or(0),
         Expr::VecSet(vec, idx, val) => depth(vec).max(depth(idx) + 1).max(depth(val) + 2),
         Expr::VecGet(vec, idx) => depth(vec).max(depth(idx) + 1),
         Expr::PrintStack
