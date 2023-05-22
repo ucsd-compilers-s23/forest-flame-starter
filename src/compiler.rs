@@ -393,6 +393,7 @@ impl Session {
                 ]);
                 self.memset(cx.si, 2, Reg32::Imm(MEM_SET_VAL));
                 self.check_is_vec(Rax);
+                self.check_is_not_nil(Rax);
                 self.check_is_num(Rdi);
                 self.emit_instrs([
                     Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rax))),
@@ -416,6 +417,7 @@ impl Session {
                 self.emit_instrs([Instr::Mov(MovArgs::ToReg(Rax, Arg64::Mem(vec_mem)))]);
                 self.memset(cx.si, 1, Reg32::Imm(MEM_SET_VAL));
                 self.check_is_vec(Rax);
+                self.check_is_not_nil(Rax);
                 self.check_is_num(Rdi);
                 self.emit_instrs([
                     Instr::Sub(BinArgs::ToReg(Rax, Arg32::Imm(1))),
@@ -440,6 +442,7 @@ impl Session {
             Expr::VecLen(vec) => {
                 self.compile_expr(cx, Loc::Reg(Rax), vec);
                 self.check_is_vec(Rax);
+                self.check_is_not_nil(Rax);
                 self.emit_instrs([
                     Instr::Sub(BinArgs::ToReg(Rax, Arg32::Imm(1))),
                     Instr::Mov(MovArgs::ToReg(Rax, Arg64::Mem(mref![Rax + 8]))),
@@ -637,6 +640,13 @@ impl Session {
             Instr::Jz(INVALID_ARG.to_string()), // jump if is num
             Instr::Test(BinArgs::ToReg(reg, Arg32::Imm(0b010))),
             Instr::Jnz(INVALID_ARG.to_string()), // jump if is bool
+        ]);
+    }
+
+    fn check_is_not_nil(&mut self, reg: Reg) {
+        self.emit_instrs([
+            Instr::Cmp(BinArgs::ToReg(reg, Arg32::Imm(NIL))),
+            Instr::Jz(INVALID_ARG.to_string()), // jump if exactly equal to 1
         ]);
     }
 
