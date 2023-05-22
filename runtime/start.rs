@@ -79,6 +79,8 @@ unsafe fn snek_str(val: SnekVal, seen: &mut HashSet<SnekVal>) -> String {
         format!("false")
     } else if val & 1 == 0 {
         format!("{}", (val as i64) >> 1)
+    } else if val == 1 {
+        format!("nil")
     } else if val & 1 == 1 {
         if !seen.insert(val) {
             return "[...]".to_string();
