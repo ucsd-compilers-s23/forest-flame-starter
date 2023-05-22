@@ -1,0 +1,14 @@
+(fun (preorder-rev t sofar)
+  (if (= t nil) sofar
+      (let ((for-left (vec (vec-get t 0) sofar)))
+        (let ((for-right (preorder-rev (vec-get t 1) for-left)))
+          (preorder-rev (vec-get t 2) for-right)))))
+
+(fun (preorder t)
+  (rev (preorder-rev t nil) nil))
+
+(fun (rev l sofar)
+  (if (= l nil) sofar
+      (rev (vec-get l 1) (vec (vec-get l 0) sofar))))
+
+(preorder (vec 4 (vec 3 nil nil) (vec 1 nil (vec 9 nil nil))))
