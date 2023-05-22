@@ -459,7 +459,8 @@ impl Session {
             Expr::PrintStack => {
                 self.emit_instrs([
                     Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Reg(STACK_BASE))),
-                    Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(Rsp))),
+                    Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(Rbp))),
+                    Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(Rsp))),
                     Instr::Call("snek_print_stack".to_string()),
                 ]);
                 self.move_to(dst, 0.repr32());
@@ -691,26 +692,25 @@ fn frame_size(locals: u32, calle_saved: &[Reg]) -> u32 {
 fn depth(e: &Expr) -> u32 {
     match e {
         Expr::BinOp(_, e1, e2) => depth(e1).max(depth(e2) + 1),
-        Expr::Let(bindings, e) => {
-            let max = bindings
-                .iter()
-                .enumerate()
-                .map(|(i, (_, e))| depth(e) + (i as u32))
-                .max()
-                .unwrap_or(0);
-            max.max(depth(e) + bindings.len() as u32)
-        }
+        Expr::Let(bindings, e) => bindings
+            .iter()
+            .enumerate()
+            .map(|(i, (_, e))| depth(e) + (i as u32))
+            .max()
+            .unwrap_or(0)
+            .max(depth(e) + bindings.len() as u32),
         Expr::If(e1, e2, e3) => depth(e1).max(depth(e2)).max(depth(e3)),
         Expr::Call(_, es) | Expr::Block(es) => es.iter().map(depth).max().unwrap_or(0),
         Expr::UnOp(_, e) | Expr::Loop(e) | Expr::Break(e) | Expr::Set(_, e) => depth(e),
-        Expr::MakeVec(size, elem) => depth(size).max(depth(elem) + 1),
+        Expr::MakeVec(size, elem) => depth(size).max(depth(elem) + 1).max(2),
         Expr::Vec(elems) => elems
             .iter()
             .enumerate()
             .map(|(i, e)| depth(e) + (i as u32))
             .max()
-            .unwrap_or(0),
-        Expr::VecSet(vec, idx, val) => depth(vec).max(depth(idx) + 1).max(depth(val) + 2),
+            .unwrap_or(0)
+            .max(elems.len() as u32),
+        Expr::VecSet(vec, idx, val) => depth(vec).max(depth(idx) + 1).max(depth(val) + 2).max(2),
         Expr::VecGet(vec, idx) => depth(vec).max(depth(idx) + 1),
         Expr::PrintStack
         | Expr::Gc
