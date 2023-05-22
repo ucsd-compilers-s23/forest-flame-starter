@@ -311,7 +311,7 @@ impl Session {
                     Instr::Jle(alloc_finish_lbl.clone()),
                     // Call try_gc to ensure we can allocate `size + 2` quad words
                     // (1 extra for the size of the vector + 1 extra for the GC metadata)
-                    Instr::Add(BinArgs::ToReg(Rdi, Arg32::Imm(1))),
+                    Instr::Add(BinArgs::ToReg(Rdi, Arg32::Imm(2))),
                     Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(HEAP_PTR))),
                     Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(STACK_BASE))),
                     Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rbp))),
@@ -355,7 +355,7 @@ impl Session {
                     Instr::Jle(vec_alloc_finish_lbl.clone()),
                     // Call try_gc to ensure we can allocate `size + 2` quad words
                     // (1 extra for the size of the vector + 1 extra for the GC metadata)
-                    Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Imm(size as i64 + 1))),
+                    Instr::Mov(MovArgs::ToReg(Rdi, Arg64::Imm(size as i64 + 2))),
                     Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Reg(HEAP_PTR))),
                     Instr::Mov(MovArgs::ToReg(Rdx, Arg64::Reg(STACK_BASE))),
                     Instr::Mov(MovArgs::ToReg(Rcx, Arg64::Reg(Rbp))),
