@@ -32,6 +32,7 @@ macro_rules! tests {
                 name: $name:ident,
                 file: $file:literal,
                 $(input: $input:literal,)?
+                $(heap_size: $heap_size:literal,)?
                 expected: $expected:literal $(,)?
                 $(" $(tt:$tt)* ")?
             }
@@ -44,8 +45,11 @@ macro_rules! tests {
                 #[allow(unused_assignments, unused_mut)]
                 let mut input = None;
                 $(input = Some($input);)?
+                #[allow(unused_assignments, unused_mut)]
+                let mut heap_size = None;
+                $(heap_size = Some($heap_size);)?
                 let kind = $crate::infra::TestKind::$kind;
-                $crate::infra::run_test(stringify!($name), $file, input, $expected, kind);
+                $crate::infra::run_test(stringify!($name), $file, input, heap_size, $expected, kind);
             }
         )*
     };
@@ -55,22 +59,29 @@ pub(crate) fn run_test(
     name: &str,
     file: &str,
     input: Option<&str>,
+    heap_size: Option<usize>,
     expected: &str,
     kind: TestKind,
 ) {
     let file = Path::new("tests").join(file);
     match kind {
-        TestKind::Success => run_success_test(name, &file, expected, input),
-        TestKind::RuntimeError => run_runtime_error_test(name, &file, expected, input),
+        TestKind::Success => run_success_test(name, &file, expected, input, heap_size),
+        TestKind::RuntimeError => run_runtime_error_test(name, &file, expected, input, heap_size),
         TestKind::StaticError => run_static_error_test(name, &file, expected),
     }
 }
 
-fn run_success_test(name: &str, file: &Path, expected: &str, input: Option<&str>) {
+fn run_success_test(
+    name: &str,
+    file: &Path,
+    expected: &str,
+    input: Option<&str>,
+    heap_size: Option<usize>,
+) {
     if let Err(err) = compile(name, file) {
         panic!("expected a successful compilation, but got an error: `{err}`");
     }
-    match run(name, input) {
+    match run(name, input, heap_size) {
         Err(err) => {
             panic!("expected a successful execution, but got an error: `{err}`");
         }
@@ -80,11 +91,17 @@ fn run_success_test(name: &str, file: &Path, expected: &str, input: Option<&str>
     }
 }
 
-fn run_runtime_error_test(name: &str, file: &Path, expected: &str, input: Option<&str>) {
+fn run_runtime_error_test(
+    name: &str,
+    file: &Path,
+    expected: &str,
+    input: Option<&str>,
+    heap_size: Option<usize>,
+) {
     if let Err(err) = compile(name, file) {
         panic!("expected a successful compilation, but got an error: `{err}`");
     }
-    match run(name, input) {
+    match run(name, input, heap_size) {
         Ok(out) => {
             panic!("expected a runtime error, but program executed succesfully - expected error: `{expected}`, output: `{out}`");
         }
@@ -125,10 +142,13 @@ fn compile(name: &str, file: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn run(name: &str, input: Option<&str>) -> Result<String, String> {
+fn run(name: &str, input: Option<&str>, heap_size: Option<usize>) -> Result<String, String> {
     let mut cmd = Command::new(&mk_path(name, Ext::Run));
     if let Some(input) = input {
         cmd.arg(input);
+    }
+    if let Some(heap_size) = heap_size {
+        cmd.arg(heap_size.to_string());
     }
     let output = cmd.output().unwrap();
     if output.status.success() {

@@ -4,6 +4,13 @@ mod infra;
 success_tests! {
     // Vectors
     {
+        name: forest_flame_make_vec,
+        file: "forest_flame_make_vec.snek",
+        input: "10",
+        heap_size: 12,
+        expected: "[0, 0, 0, 0, 0, 0, 0, 0, 0, 0]"
+    },
+    {
         name: forest_flame_nil_eq,
         file: "forest_flame_nil_eq.snek",
         expected: "true"
