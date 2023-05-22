@@ -4,6 +4,21 @@ mod infra;
 success_tests! {
     // Vectors
     {
+        name: forest_flame_nil_eq,
+        file: "forest_flame_nil_eq.snek",
+        expected: "true"
+    },
+    {
+        name: forest_flame_preorder,
+        file: "forest_flame_preorder.snek",
+        expected: "[4, [3, [1, [9, nil]]]]"
+    },
+    {
+        name: forest_flame_treesum,
+        file: "forest_flame_treesum.snek",
+        expected: "31"
+    },
+    {
         name: forest_flame_is_vec_fail0,
         file: "forest_flame_input_is_vec.snek",
         input: "0",
@@ -443,6 +458,11 @@ success_tests! {
 
 runtime_error_tests! {
     // Vectors
+    {
+        name: forest_flame_deref_nil,
+        file: "forest_flame_deref_nil.snek",
+        expected: "invalid argument"
+    },
     {
         name: forest_flame_vec_get_fail1,
         file: "forest_flame_vec_get.snek",
