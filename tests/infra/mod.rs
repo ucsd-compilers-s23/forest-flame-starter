@@ -11,22 +11,25 @@ pub(crate) enum TestKind {
 
 #[macro_export]
 macro_rules! success_tests {
-    ($($tt:tt)*) => { $crate::tests!(Success => $($tt)*); }
+    (subdir: $subdir:literal, $($tt:tt)*) => { $crate::tests!(Success, Some($subdir) => $($tt)*); };
+    ($($tt:tt)*) => { $crate::tests!(Success, None => $($tt)*); }
 }
 
 #[macro_export]
 macro_rules! runtime_error_tests {
-    ($($tt:tt)*) => { $crate::tests!(RuntimeError => $($tt)*); }
+    (subdir: $subdir:literal, $($tt:tt)*) => { $crate::tests!(RuntimeError, Some($subdir) => $($tt)*); };
+    ($($tt:tt)*) => { $crate::tests!(RuntimeError, None => $($tt)*); }
 }
 
 #[macro_export]
 macro_rules! static_error_tests {
-    ($($tt:tt)*) => { $crate::tests!(StaticError => $($tt)*); }
+    (subdir: $subdir:literal, $($tt:tt)*) => { $crate::tests!(StaticError, Some($subdir) => $($tt)*); };
+    ($($tt:tt)*) => { $crate::tests!(StaticError, None => $($tt)*); }
 }
 
 #[macro_export]
 macro_rules! tests {
-    ($kind:ident =>
+    ($kind:ident, $subdir:expr =>
         $(
             {
                 name: $name:ident,
@@ -49,7 +52,7 @@ macro_rules! tests {
                 let mut heap_size = None;
                 $(heap_size = Some($heap_size);)?
                 let kind = $crate::infra::TestKind::$kind;
-                $crate::infra::run_test(stringify!($name), $file, input, heap_size, $expected, kind);
+                $crate::infra::run_test(stringify!($name), $subdir, $file, input, heap_size, $expected, kind);
             }
         )*
     };
@@ -57,17 +60,24 @@ macro_rules! tests {
 
 pub(crate) fn run_test(
     name: &str,
+    subdir: Option<&str>,
     file: &str,
     input: Option<&str>,
     heap_size: Option<usize>,
     expected: &str,
     kind: TestKind,
 ) {
-    let file = Path::new("tests").join(file);
+    let mut path = PathBuf::new();
+    path.push("tests");
+    if let Some(subdir) = subdir {
+        path.push(subdir);
+    }
+    path.push(file);
+
     match kind {
-        TestKind::Success => run_success_test(name, &file, expected, input, heap_size),
-        TestKind::RuntimeError => run_runtime_error_test(name, &file, expected, input, heap_size),
-        TestKind::StaticError => run_static_error_test(name, &file, expected),
+        TestKind::Success => run_success_test(name, &path, expected, input, heap_size),
+        TestKind::RuntimeError => run_runtime_error_test(name, &path, expected, input, heap_size),
+        TestKind::StaticError => run_static_error_test(name, &path, expected),
     }
 }
 
