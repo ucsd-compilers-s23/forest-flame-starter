@@ -3,6 +3,7 @@ use std::{
     process::Command,
 };
 
+#[allow(unused)]
 pub(crate) enum TestKind {
     Success,
     RuntimeError,
@@ -144,6 +145,7 @@ fn compile(name: &str, file: &Path) -> Result<(), String> {
 
     // Assemble and link
     let output = Command::new("make")
+        .arg("-B")
         .arg(&mk_path(name, Ext::Run))
         .output()
         .expect("could not run make");

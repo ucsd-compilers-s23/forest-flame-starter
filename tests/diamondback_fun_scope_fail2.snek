@@ -1,3 +1,0 @@
-(fun (increment x) (x x))
-
-(increment 7)

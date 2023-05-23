@@ -1,3 +1,0 @@
-(fun (printboth x y) (print x) (print y))
-
-(printboth true -7)

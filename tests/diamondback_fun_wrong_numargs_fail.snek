@@ -1,6 +1,0 @@
-(fun (fun1 m n o p)
-    (* n n)
-)
-
-
-(+ input (fun1 1 2 input))

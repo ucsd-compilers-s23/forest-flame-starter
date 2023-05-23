@@ -1,4 +1,0 @@
-(fun (foo n)
-  (foo (* n 3)))
-
-(foo 7)

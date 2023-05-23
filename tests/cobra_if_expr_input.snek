@@ -1,1 +1,0 @@
-(if (= input 665) (+ true false) 20)

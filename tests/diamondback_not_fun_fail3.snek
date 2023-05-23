@@ -1,3 +1,0 @@
-(+ 3 12)
-
-(fun (increment x) (add1 x))
