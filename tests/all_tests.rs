@@ -94,6 +94,13 @@ success_tests! {
         file: "forest_flame_quick_sort.snek",
         expected: "[0, 1, 3, 6, 7, 9, 9, 10, 18, 38, 49]",
     },
+    {
+        name: forest_flame_cbn,
+        file: "forest_flame_cbn.snek",
+        heap_size: 50000,
+        expected: "[0, 1]",
+    },
+
     // Number and Boolean Literals
     {
         name: adder_num,
