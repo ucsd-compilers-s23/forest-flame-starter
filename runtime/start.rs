@@ -50,12 +50,12 @@ pub unsafe extern "C" fn snek_print(val: SnekVal) -> SnekVal {
 }
 
 /// This function is called when the program needs to allocate `count` words of memory and there's no
-/// space left. The function should try to clean up space by triggering a gargage collection. If there's
+/// space left. The function should try to clean up space by triggering a garbage collection. If there's
 /// not enough space to hold `count` words after running the garbage collector, the program should terminate
 /// with an `out of memory` error.
 ///
 /// Args:
-///     * `count`: The number of words the program is trying to allocate including an extra word for
+///     * `count`: The number of words the program is trying to allocate, including an extra word for
 ///       the size of the vector and an extra word to store metadata for the garbage collector, e.g.,
 ///       to allocate a vector of size 5, `count` will be 7.
 ///     * `heap_ptr`: The current position of the heap pointer (i.e., the value stored in `%r15`). It
@@ -70,7 +70,7 @@ pub unsafe extern "C" fn snek_print(val: SnekVal) -> SnekVal {
 /// The new heap pointer where the program should allocate the vector (i.e., the new value of `%r15`)
 ///
 #[export_name = "\x01snek_try_gc"]
-unsafe fn snek_try_gc(
+pub unsafe fn snek_try_gc(
     count: isize,
     heap_ptr: *const u64,
     stack_base: *const u64,
@@ -84,7 +84,7 @@ unsafe fn snek_try_gc(
 /// This function should trigger garbage collection and return the updated heap pointer (i.e., the new
 /// value of `%r15`). See [`snek_try_gc`] for a description of the meaning of the arguments.
 #[export_name = "\x01snek_gc"]
-unsafe fn snek_gc(
+pub unsafe fn snek_gc(
     heap_ptr: *const u64,
     stack_base: *const u64,
     curr_rbp: *const u64,
@@ -96,7 +96,7 @@ unsafe fn snek_gc(
 /// A helper function that can called with the `(snek-printstack)` snek function. It prints the stack
 /// See [`snek_try_gc`] for a description of the meaning of the arguments.
 #[export_name = "\x01snek_print_stack"]
-unsafe fn snek_print_stack(stack_base: *const u64, curr_rbp: *const u64, curr_rsp: *const u64) {
+pub unsafe fn snek_print_stack(stack_base: *const u64, curr_rbp: *const u64, curr_rsp: *const u64) {
     let mut ptr = stack_base;
     println!("-----------------------------------------");
     while ptr >= curr_rsp {
