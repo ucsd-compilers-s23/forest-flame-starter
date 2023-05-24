@@ -29,6 +29,7 @@ const HEAP_PTR: Reg = R15;
 
 const NIL: i32 = 0b001;
 const MEM_SET_VAL: i32 = NIL;
+const GC_WORD_VAL: i32 = 0;
 
 #[derive(Debug, Clone)]
 struct Ctxt<'a> {
@@ -322,7 +323,9 @@ impl Session {
                     // Load size again in %rsi
                     Instr::Mov(MovArgs::ToReg(Rsi, Arg64::Mem(size_mem))),
                     Instr::Sar(BinArgs::ToReg(Rsi, Arg32::Imm(1))),
-                    // Write size in heap ptr + 8
+                    // Write GC word in HEAP_PTR
+                    Instr::Mov(MovArgs::ToMem(mref!(HEAP_PTR + 0), Reg32::Imm(GC_WORD_VAL))),
+                    // Write size in HEAP_PTR + 8
                     Instr::Mov(MovArgs::ToMem(mref!(HEAP_PTR + 8), Reg32::Reg(Rsi))),
                     // Fill vector using `rep stosq` (%rdi = ptr, %rcx = count, %rax = val)
                     Instr::Lea(Rdi, mref!(HEAP_PTR + 16)),
@@ -363,6 +366,9 @@ impl Session {
                     Instr::Call("snek_try_gc".to_string()),
                     Instr::Mov(MovArgs::ToReg(HEAP_PTR, Arg64::Reg(Rax))),
                     Instr::Label(vec_alloc_finish_lbl),
+                    // Write GC word in HEAP_PTR
+                    Instr::Mov(MovArgs::ToMem(mref!(HEAP_PTR + 0), Reg32::Imm(GC_WORD_VAL))),
+                    // Write size in HEAP_PTR + 8
                     Instr::Mov(MovArgs::ToMem(mref!(HEAP_PTR + 8), Reg32::Imm(size))),
                 ]);
 
