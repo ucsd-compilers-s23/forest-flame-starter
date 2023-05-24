@@ -1,0 +1,19 @@
+(fun (range n m)
+  (if (= n m) (vec n nil) (vec n (range (add1 n) m))))
+
+(fun (append list1 list2)
+  (if (= list1 nil)
+      list2
+      (vec (vec-get list1 0) (append (vec-get list1 1) list2))))
+
+(fun (reverse list)
+  (if (= list nil) nil (append (reverse (vec-get list 1)) (vec (vec-get list 0) nil))))
+
+(fun (printall list) (loop
+  (if (= list nil) (break nil) (block
+    (print (vec-get list 0))
+    (set! list (vec-get list 1))
+  ))))
+
+(let ((list (range 1 5)))
+  (printall (append list (reverse list))))

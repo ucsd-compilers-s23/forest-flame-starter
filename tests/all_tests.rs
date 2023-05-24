@@ -18,7 +18,12 @@ success_tests! {
         file: "vec_get.snek",
         input: "3",
         expected: "3",
-    }
+    },
+    {
+        name: linked_list_manipulations,
+        file: "linked_list_manipulations.snek",
+        expected: "1\n2\n3\n4\n5\n5\n4\n3\n2\n1\nnil"
+    },
 }
 
 runtime_error_tests! {
