@@ -47,7 +47,13 @@ impl Parser {
                 "false" => Expr::Boolean(false),
                 "input" => Expr::Input,
                 "nil" => Expr::Nil,
-                _ => Expr::Var(Symbol::new(id)),
+                _ => {
+                    if is_keyword(id) {
+                        syntax_error("invalid use of keyword `{id}`")
+                    } else {
+                        Expr::Var(Symbol::new(id))
+                    }
+                }
             },
             Sexp::List(vec) => match &vec[..] {
                 // (snek-printstack)
@@ -237,6 +243,7 @@ impl Parser {
                 };
                 let params = params.iter().map(|e| self.parse_identifier(e)).collect();
                 let body = self.parse_expr(body);
+                let name = self.parse_identifier(name);
                 FunDecl {
                     name: Symbol::new(name),
                     params,
@@ -266,6 +273,8 @@ fn is_keyword(s: &str) -> bool {
     matches!(
         s,
         "loop"
+            | "true"
+            | "false"
             | "break"
             | "add1"
             | "sub1"

@@ -234,11 +234,12 @@ impl Session {
 
                 self.emit_instr(Instr::Label(loop_start_lbl.clone()));
                 self.compile_expr(&cx.set_curr_lbl(&loop_end_lbl), dst, e);
-                self.emit_instrs([Instr::Jmp(loop_start_lbl), Instr::Label(loop_end_lbl)])
+                self.emit_instrs([Instr::Jmp(loop_start_lbl), Instr::Label(loop_end_lbl)]);
+                self.move_to(dst, Arg64::Reg(Rax));
             }
             Expr::Break(e) => {
                 if let Some(lbl) = cx.curr_lbl {
-                    self.compile_expr(cx, dst, e);
+                    self.compile_expr(cx, Loc::Reg(Rax), e);
                     self.emit_instr(Instr::Jmp(lbl.to_string()));
                 } else {
                     raise_break_outside_loop()
@@ -263,23 +264,14 @@ impl Session {
                     raise_wrong_number_of_args(*fun, *arity, args.len());
                 }
 
-                let mut nargs = args.len() as i32;
-                if nargs % 2 == 0 {
-                    self.emit_instr(Instr::Sub(BinArgs::ToReg(Rsp, Arg32::Imm(8 * nargs))));
-                } else {
-                    self.emit_instrs([
-                        Instr::Push(Arg32::Imm(MEM_SET_VAL)),
-                        Instr::Sub(BinArgs::ToReg(Rsp, Arg32::Imm(8 * nargs))),
-                    ]);
-                    nargs += 1;
+                let mut currcx = cx.clone();
+                for arg in args {
+                    let (nextcx, mem) = currcx.next_local();
+                    self.compile_expr(&currcx, Loc::Mem(mem), arg);
+                    currcx = nextcx;
                 }
-                for (i, arg) in args.iter().enumerate() {
-                    self.compile_expr(cx, Loc::Mem(mref![Rsp + %(8 * i)]), arg);
-                }
-                self.emit_instrs([
-                    Instr::Call(fun_label(*fun)),
-                    Instr::Add(BinArgs::ToReg(Rsp, Arg32::Imm(8 * nargs))),
-                ]);
+                self.call(*fun, locals(cx.si, args.len() as u32).map(Arg32::Mem));
+                self.memset(cx.si, args.len() as u32, Reg32::Imm(MEM_SET_VAL));
                 self.move_to(dst, Arg64::Reg(Rax));
             }
             Expr::Nil => {
@@ -474,6 +466,20 @@ impl Session {
         }
     }
 
+    fn call(&mut self, fun: Symbol, args: impl IntoIterator<Item = Arg32>) {
+        let mut args: Vec<_> = args.into_iter().collect();
+        if args.len() % 2 != 0 {
+            args.push(Arg32::Imm(MEM_SET_VAL));
+        }
+        for arg in args.iter().rev() {
+            self.emit_instr(Instr::Push(*arg))
+        }
+        self.emit_instrs([
+            Instr::Call(fun_label(fun)),
+            Instr::Add(BinArgs::ToReg(Rsp, Arg32::Imm(8 * args.len() as i32))),
+        ]);
+    }
+
     fn compile_un_op(&mut self, cx: &Ctxt, dst: Loc, op: Op1, e: &Expr) {
         self.compile_expr(cx, Loc::Reg(Rax), e);
         match op {
@@ -642,8 +648,7 @@ impl Session {
     }
 
     fn memset(&mut self, start: u32, count: u32, elem: Reg32) {
-        for i in start..start + count {
-            let mem = mref![Rbp - %(8 * (i + 1))];
+        for mem in locals(start, count) {
             self.emit_instr(Instr::Mov(MovArgs::ToMem(mem, elem)));
         }
     }
@@ -685,6 +690,10 @@ impl Session {
     }
 }
 
+fn locals(start: u32, count: u32) -> impl Iterator<Item = MemRef> {
+    (start..start + count).map(|i| mref![Rbp - %(8 * (i + 1))])
+}
+
 fn frame_size(locals: u32, calle_saved: &[Reg]) -> u32 {
     // #locals + #callee saved + return address
     let n = locals + calle_saved.len() as u32 + 1;
@@ -706,16 +715,16 @@ fn depth(e: &Expr) -> u32 {
             .unwrap_or(0)
             .max(depth(e) + bindings.len() as u32),
         Expr::If(e1, e2, e3) => depth(e1).max(depth(e2)).max(depth(e3)),
-        Expr::Call(_, es) | Expr::Block(es) => es.iter().map(depth).max().unwrap_or(0),
+        Expr::Block(es) => es.iter().map(depth).max().unwrap_or(0),
         Expr::UnOp(_, e) | Expr::Loop(e) | Expr::Break(e) | Expr::Set(_, e) => depth(e),
         Expr::MakeVec(size, elem) => depth(size).max(depth(elem) + 1).max(2),
-        Expr::Vec(elems) => elems
+        Expr::Call(_, es) | Expr::Vec(es) => es
             .iter()
             .enumerate()
             .map(|(i, e)| depth(e) + (i as u32))
             .max()
             .unwrap_or(0)
-            .max(elems.len() as u32),
+            .max(es.len() as u32),
         Expr::VecSet(vec, idx, val) => depth(vec).max(depth(idx) + 1).max(depth(val) + 2).max(2),
         Expr::VecGet(vec, idx) => depth(vec).max(depth(idx) + 1),
         Expr::PrintStack
